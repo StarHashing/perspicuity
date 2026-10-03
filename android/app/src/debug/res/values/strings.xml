@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Debug 变体的桌面标签。用「澄怀 Debug」以便与正式版区分，
+         但绝不残留上游 MarkText 品牌。 -->
+    <string name="app_name">澄怀 Debug</string>
+</resources>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launch background; the night variant lives in values-night/colors.xml. -->
+    <color name="splash_background">#F7F2E6</color>
+    <!-- Muted grey splash mark; light-mode uses a darker grey for contrast. -->
+    <color name="splash_icon_tint">#5F6368</color>
+    <!--
+        系统状态栏底色。用「澄怀米黄」的应用框架色，让顶部状态栏与 App
+        主体连成一片，而不是默认的纯白。取值必须与
+        src/styles/themes/perspicuity-sepia.css 里的应用框架底色令牌保持一致；
+        深色主题下由 values-night 覆盖。
+    -->
+    <color name="status_bar_background">#F7F2E6</color>
+</resources>

@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Perspicuity 便签浮窗</title>
+    <style>
+      :root {
+        /* 默认深色主题；原生会通过 __perspicuityTheme 切换 */
+        --fg: #e8e8f0;
+        --fg-dim: #9a9ab0;
+        --accent: #7cc4ff;
+        --code-bg: rgba(255, 255, 255, 0.08);
+        --border: rgba(255, 255, 255, 0.12);
+        --card-bg: #1e1e2a;
+        --fs: 14px;
+      }
+      /* 浅色主题 */
+      html[data-theme="light"] {
+        --fg: #1d1d22;
+        --fg-dim: #5a5a6e;
+        --accent: #0a66c2;
+        --code-bg: rgba(0, 0, 0, 0.06);
+        --border: rgba(0, 0, 0, 0.14);
+        --card-bg: #ffffff;
+      }
+      /* 纸黄护眼主题 */
+      html[data-theme="sepia"] {
+        --fg: #3a2f1c;
+        --fg-dim: #7a6a4a;
+        --accent: #a0522d;
+        --code-bg: rgba(120, 90, 30, 0.10);
+        --border: rgba(120, 90, 30, 0.24);
+        --card-bg: #f5ecd7;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        /* 卡片背景由原生窗口设置，这里同步给 body 让文字对比度正确 */
+        background: transparent;
+        color: var(--fg);
+        font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+        font-size: var(--fs);
+        line-height: 1.65;
+        -webkit-user-select: text;
+        user-select: text;
+        overflow: hidden;
+        transition: color 0.15s ease;
+      }
+      #root {
+        width: 100%;
+        height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 10px 12px 16px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,0.25) transparent;
+      }
+      #root::-webkit-scrollbar { width: 4px; height: 4px; }
+      #root::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.22);
+        border-radius: 2px;
+      }
+      #root.empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--fg-dim);
+        font-size: 13px;
+      }
+
+      /* ---- 基础排版 ---- */
+      h1, h2, h3, h4, h5, h6 {
+        margin: 0.9em 0 0.45em;
+        line-height: 1.3;
+        font-weight: 600;
+      }
+      h1 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }
+      h2 { font-size: 1.3em; border-bottom: 1px solid var(--border); padding-bottom: 0.15em; }
+      h3 { font-size: 1.15em; }
+      h4 { font-size: 1.05em; }
+      h5, h6 { font-size: 1em; color: var(--fg-dim); }
+      p { margin: 0.5em 0; }
+      a { color: var(--accent); text-decoration: none; }
+      a:active { text-decoration: underline; }
+      strong { font-weight: 700; color: var(--fg); }
+      em { font-style: italic; }
+      del { color: var(--fg-dim); }
+      hr {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 1em 0;
+      }
+      blockquote {
+        margin: 0.6em 0;
+        padding: 0.2em 0.9em;
+        border-left: 3px solid var(--accent);
+        background: rgba(124, 196, 255, 0.07);
+        color: var(--fg-dim);
+      }
+      ul, ol { margin: 0.45em 0; padding-left: 1.4em; }
+      li { margin: 0.18em 0; }
+      li > ul, li > ol { margin: 0.15em 0; }
+
+      code {
+        font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.88em;
+        background: var(--code-bg);
+        padding: 0.12em 0.4em;
+        border-radius: 4px;
+      }
+      pre {
+        margin: 0.7em 0;
+        padding: 0.7em 0.85em;
+        background: rgba(0, 0, 0, 0.28);
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      pre code {
+        background: none;
+        padding: 0;
+        font-size: 0.85em;
+        line-height: 1.5;
+        white-space: pre;
+      }
+
+      /* ---- 表格 ---- */
+      .md-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0.7em 0; }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 0.9em;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 0.35em 0.6em;
+        text-align: left;
+        vertical-align: top;
+      }
+      th { background: rgba(255,255,255,0.06); font-weight: 600; }
+
+      img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 6px;
+        margin: 0.4em 0;
+      }
+
+      /* ---- 任务列表 ---- */
+      .task-item { list-style: none; margin-left: -1.1em; }
+      .task-item input { margin-right: 0.45em; vertical-align: middle; }
+    </style>
+  </head>
+  <body>
+    <div id="root" class="empty">（等待内容）</div>
+
+    <script>
+      ;(function () {
+        'use strict'
+
+        var root = document.getElementById('root')
+
+        /* =====================================================================
+         * 轻量 Markdown 渲染器
+         * 目标：浮窗里能看清「表格 / 代码块 / 列表 / 引用 / 图片」即可，
+         * 不引任何三方依赖（浮窗是独立 WebView，不能拖主 bundle）。
+         * 安全：所有文本经 escapeHtml 转义后再拼接，天然免疫 XSS。
+         * ===================================================================== */
+
+        function escapeHtml(str) {
+          return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+        }
+
+        // 行内标记：`code` **strong** *em* ~~del~~ [text](url) ![alt](src)
+        // 从「最高优先级」到低逐个替换，code 先于其它，避免被再次解析。
+        function renderInline(text) {
+          var out = escapeHtml(text)
+          var codeStore = []
+          // 行内代码先抽出来占位，避免内部被其它规则误伤
+          out = out.replace(/`([^`]+)`/g, function (_, code) {
+            codeStore.push(code)
+            return '\u0000CODE' + (codeStore.length - 1) + '\u0000'
+          })
+          // 图片（要在链接之前，否则 ![..](..) 会被链接规则吃掉）
+          out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
+            function (_, alt, src, title) {
+              var t = title ? ' title="' + title + '"' : ''
+              return '<img alt="' + alt + '" src="' + src + '"' + t + ' />'
+            })
+          // 链接
+          out = out.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
+            function (_, label, href, title) {
+              var t = title ? ' title="' + title + '"' : ''
+              return '<a href="' + href + '"' + t + '>' + label + '</a>'
+            })
+          // 加粗 / 斜体 / 删除线
+          out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+          out = out.replace(/__([^_]+)__/g, '<strong>$1</strong>')
+          out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+          out = out.replace(/(^|[^_])_([^_\n]+)_/g, '$1<em>$2</em>')
+          out = out.replace(/~~([^~]+)~~/g, '<del>$1</del>')
+          // 还原行内代码
+          out = out.replace(/\u0000CODE(\d+)\u0000/g, function (_, i) {
+            return '<code>' + codeStore[Number(i)] + '</code>'
+          })
+          return out
+        }
+
+        function isTableSeparator(line) {
+          return /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)+\|?\s*$/.test(line)
+        }
+
+        function splitTableRow(line) {
+          var trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '')
+          return trimmed.split('|').map(function (c) { return c.trim() })
+        }
+
+        function renderMarkdown(src) {
+          if (!src) return ''
+          var lines = String(src).replace(/\r\n?/g, '\n').split('\n')
+          var html = []
+          var i = 0
+          var listStack = [] // 'ul' | 'ol' | 'task'
+
+          function closeLists() {
+            while (listStack.length) {
+              html.push('</' + (listStack.pop() === 'task' ? 'ul' : listStack.slice(-1)[0] || 'ul') + '>')
+            }
+            listStack = []
+          }
+
+          while (i < lines.length) {
+            var line = lines[i]
+
+            // ---- 代码块 ----
+            var fence = line.match(/^\s*(```|~~~)\s*([\w+-]*)\s*$/)
+            if (fence) {
+              closeLists()
+              var marker = fence[1]
+              var langClass = fence[2] ? ' class="language-' + escapeHtml(fence[2]) + '"' : ''
+              var buf = []
+              i += 1
+              while (i < lines.length && !/^\s*(```|~~~)\s*$/.test(lines[i])) {
+                buf.push(lines[i])
+                i += 1
+              }
+              i += 1 // 跳过闭合行
+              html.push('<pre><code' + langClass + '>' + escapeHtml(buf.join('\n')) + '</code></pre>')
+              continue
+            }
+
+            // ---- 水平线 ----
+            if (/^\s*([-*_])\s*(\1\s*){2,}$/.test(line)) {
+              closeLists()
+              html.push('<hr />')
+              i += 1
+              continue
+            }
+
+            // ---- 标题 ----
+            var h = line.match(/^\s*(#{1,6})\s+(.*?)\s*#*\s*$/)
+            if (h) {
+              closeLists()
+              var level = h[1].length
+              html.push('<h' + level + '>' + renderInline(h[2]) + '</h' + level + '>')
+              i += 1
+              continue
+            }
+
+            // ---- 表格 ----
+            if (line.indexOf('|') !== -1 && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+              closeLists()
+              var headCells = splitTableRow(line)
+              i += 2
+              var bodyRows = []
+              while (i < lines.length && lines[i].indexOf('|') !== -1 && lines[i].trim() !== '') {
+                bodyRows.push(splitTableRow(lines[i]))
+                i += 1
+              }
+              var tableHtml = '<div class="md-table-wrap"><table><thead><tr>'
+              headCells.forEach(function (c) { tableHtml += '<th>' + renderInline(c) + '</th>' })
+              tableHtml += '</tr></thead><tbody>'
+              bodyRows.forEach(function (row) {
+                tableHtml += '<tr>'
+                for (var c = 0; c < headCells.length; c += 1) {
+                  tableHtml += '<td>' + renderInline(row[c] == null ? '' : row[c]) + '</td>'
+                }
+                tableHtml += '</tr>'
+              })
+              tableHtml += '</tbody></table></div>'
+              html.push(tableHtml)
+              continue
+            }
+
+            // ---- 引用 ----
+            if (/^\s*>\s?/.test(line)) {
+              closeLists()
+              var quote = []
+              while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+                quote.push(lines[i].replace(/^\s*>\s?/, ''))
+                i += 1
+              }
+              html.push('<blockquote>' + renderMarkdown(quote.join('\n')) + '</blockquote>')
+              continue
+            }
+
+            // ---- 任务列表 ----
+            var task = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/)
+            if (task) {
+              if (listStack[listStack.length - 1] !== 'task') {
+                closeLists()
+                html.push('<ul>')
+                listStack.push('task')
+              }
+              var checked = task[1].toLowerCase() === 'x'
+              html.push('<li class="task-item"><input type="checkbox" disabled' +
+                (checked ? ' checked' : '') + ' />' + renderInline(task[2]) + '</li>')
+              i += 1
+              continue
+            }
+
+            // ---- 无序列表 ----
+            var ul = line.match(/^\s*[-*+]\s+(.*)$/)
+            if (ul) {
+              if (listStack[listStack.length - 1] !== 'ul') {
+                closeLists()
+                html.push('<ul>')
+                listStack.push('ul')
+              }
+              html.push('<li>' + renderInline(ul[1]) + '</li>')
+              i += 1
+              continue
+            }
+
+            // ---- 有序列表 ----
+            var ol = line.match(/^\s*\d+[.)]\s+(.*)$/)
+            if (ol) {
+              if (listStack[listStack.length - 1] !== 'ol') {
+                closeLists()
+                html.push('<ol>')
+                listStack.push('ol')
+              }
+              html.push('<li>' + renderInline(ol[1]) + '</li>')
+              i += 1
+              continue
+            }
+
+            // ---- 空行 ----
+            if (/^\s*$/.test(line)) {
+              closeLists()
+              i += 1
+              continue
+            }
+
+            // ---- 段落（连续非空行合并） ----
+            closeLists()
+            var para = [line]
+            i += 1
+            while (
+              i < lines.length &&
+              !/^\s*$/.test(lines[i]) &&
+              !/^\s*(#{1,6})\s+/.test(lines[i]) &&
+              !/^\s*(```|~~~)/.test(lines[i]) &&
+              !/^\s*>/.test(lines[i]) &&
+              !/^\s*[-*+]\s+/.test(lines[i]) &&
+              !/^\s*\d+[.)]\s+/.test(lines[i]) &&
+              !(lines[i].indexOf('|') !== -1 && i + 1 < lines.length && isTableSeparator(lines[i + 1]))
+            ) {
+              para.push(lines[i])
+              i += 1
+            }
+            html.push('<p>' + para.map(renderInline).join('<br />') + '</p>')
+          }
+
+          closeLists()
+          return html.join('\n')
+        }
+
+        /* =====================================================================
+         * 原生接口
+         * ===================================================================== */
+        function sendToNative(action) {
+          try {
+            if (window.PerspicuityFloating && window.PerspicuityFloating.request) {
+              window.PerspicuityFloating.request(action)
+            }
+          } catch (e) {
+            // 桥不存在（如在浏览器里预览）时静默忽略。
+          }
+        }
+
+        /* =====================================================================
+         * 对外渲染接口
+         * 原生调用：window.__perspicuityRender(JSON.stringify({title, markdown}))
+         * 但原生其实传的是「已 JSON 序列化后的字符串字面量」，所以这里收到的
+         * 是一个字符串，需要再 parse 一次；也兼容直接传对象的情况。
+         * ===================================================================== */
+        window.__perspicuityRender = function (payload) {
+          var data = payload
+          if (typeof payload === 'string') {
+            try {
+              data = JSON.parse(payload)
+            } catch (e) {
+              data = { markdown: payload }
+            }
+          }
+          if (!data || typeof data !== 'object') {
+            data = { markdown: String(payload == null ? '' : payload) }
+          }
+          var markdown = data.markdown == null ? '' : String(data.markdown)
+          if (!markdown.trim()) {
+            root.className = 'empty'
+            root.textContent = '（空文档）'
+            return
+          }
+          root.className = ''
+          root.innerHTML = renderMarkdown(markdown)
+          root.scrollTop = 0
+        }
+
+        // 标题栏由原生提供，页面只负责正文；暴露一个探针方便原生判断加载完成。
+        window.__perspicuityReady = true
+
+        /* =====================================================================
+         * 长按选中 → 原生复制菜单
+         * 悬浮窗带 FLAG_NOT_FOCUSABLE，系统不会给它弹文本选择 ActionMode，
+         * 所以这里自己监听选中，把文字回传给原生，由原生弹「复制/全选」。
+         * ===================================================================== */
+        var selectTimer = null
+        // 上一次已经上报过的文字，用于去重：拖动时 selectionchange 会高频触发，
+        // 若每次都上报会导致原生弹出一堆复制菜单。
+        var lastSentText = null
+        function reportSelection() {
+          var text = ''
+          try {
+            var sel = window.getSelection ? window.getSelection() : null
+            if (sel) {
+              text = String(sel.toString() || '')
+            }
+          } catch (e) {
+            text = ''
+          }
+          if (!text) {
+            return
+          }
+          // 同一段文字只上报一次，避免反复弹菜单。
+          if (text === lastSentText) {
+            return
+          }
+          lastSentText = text
+          try {
+            if (window.PerspicuityFloating && window.PerspicuityFloating.onSelectText) {
+              window.PerspicuityFloating.onSelectText(text)
+            }
+          } catch (e) {
+            // 桥不存在时忽略。
+          }
+        }
+        // 选中「稳定」一段时间后才上报：拖动选区手柄时文字会不断变化，
+        // 必须等用户停手（选区不再变）再弹菜单，否则会弹出一连串复制按钮。
+        document.addEventListener('selectionchange', function () {
+          if (selectTimer) {
+            clearTimeout(selectTimer)
+          }
+          selectTimer = setTimeout(reportSelection, 600)
+        })
+        // 拖动选区时用户按下手指 → 取消待上报，避免拖动过程中弹菜单。
+        document.addEventListener('selectstart', function () {
+          if (selectTimer) {
+            clearTimeout(selectTimer)
+            selectTimer = null
+          }
+        })
+        // 长按（contextmenu）时也可以立即触发一次。
+        document.addEventListener('contextmenu', function (event) {
+          if (event && event.preventDefault) {
+            event.preventDefault()
+          }
+          if (selectTimer) {
+            clearTimeout(selectTimer)
+            selectTimer = null
+          }
+          reportSelection()
+        })
+        // 点空白处 / 选区被清空时，重置去重标记，方便下次重新选同一段也能弹。
+        document.addEventListener('click', function () {
+          lastSentText = null
+        })
+
+        // 提供给原生「全选」菜单项调用。
+        window.__perspicuitySelectAll = function () {
+          try {
+            var sel = window.getSelection ? window.getSelection() : null
+            var range = document.createRange ? document.createRange() : null
+            if (sel && range) {
+              var root = document.getElementById('root') || document.body
+              if (root) {
+                range.selectNodeContents(root)
+                sel.removeAllRanges()
+                sel.addRange(range)
+              }
+            }
+          } catch (e) {
+            // 忽略。
+          }
+        }
+
+        /* =====================================================================
+         * 原生控制接口：主题 / 字号
+         * ===================================================================== */
+        window.__perspicuityTheme = function (theme) {
+          var t = String(theme || 'dark')
+          if (t !== 'light' && t !== 'sepia' && t !== 'dark') {
+            t = 'dark'
+          }
+          document.documentElement.setAttribute('data-theme', t)
+        }
+
+        window.__perspicuityFontSize = function (px) {
+          var size = Number(px)
+          if (!isFinite(size)) {
+            size = 14
+          }
+          if (size < 11) {
+            size = 11
+          }
+          if (size > 24) {
+            size = 24
+          }
+          document.documentElement.style.setProperty('--fs', size + 'px')
+        }
+      })()
+    </script>
+  </body>
+</html>

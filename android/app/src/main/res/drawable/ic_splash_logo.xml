@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  启动图标（API 24/25 兼容版）。
+
+  直接用 adaptive icon 的前景位图（现已是「透明底 + 深色图形」）。
+  这里不再使用 <bitmap android:gravity="center"> 的旧写法 ——
+  那种写法在缺少显式宽高时 AAPT 无法确定目标尺寸，很多设备会
+  渲染成「空的实心方框」，正是「灰色圆角方框里没图标」的成因之一。
+  改用 inset + bitmap(fill) 让位图自适应铺满 inset 区域。
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:inset="18dp">
+    <bitmap
+        android:src="@mipmap/ic_launcher_foreground"
+        android:gravity="fill"
+        android:tint="@color/splash_icon_tint" />
+</inset>

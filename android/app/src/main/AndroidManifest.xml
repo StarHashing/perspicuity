@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="content" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="text/x-markdown" />
+                <data android:mimeType="text/vnd.daringfireball.markdown" />
+            </intent-filter>
+
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="content" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="text/x-markdown" />
+                <data android:mimeType="text/vnd.daringfireball.markdown" />
+            </intent-filter>
+
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+            <!-- 项目归档 zip 的「打开方式 / 分享到」入口。QQ / 微信长按 zip →
+                 打开方式 → 本 App，或把 zip 分享进来。MIME 各家报法不一，
+                 这里把常见几种都列上：application/zip 是标准值，
+                 application/x-zip-compressed 是 Windows 传统的非标准值。 -->
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+            </intent-filter>
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+
+        <!-- 全局便签浮窗：把文档钉在其他 app 之上（边玩游戏/看教程边瞄一眼）。
+             前台服务持有 WindowManager 浮窗，退到后台浮窗依然存在。
+             开源自用（不上架），故 SYSTEM_ALERT_WINDOW 不做 release 剥离。 -->
+        <service
+            android:name=".FloatingNoteService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="floating_reference_note_overlay" />
+        </service>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 全局便签浮窗：在其他 app 之上绘制悬浮窗所必需。
+         授予入口是系统设置页（Settings.ACTION_MANAGE_OVERLAY_PERMISSION），
+         无法用运行时弹窗申请。开源自用，故不做 release 剥离。 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- 悬浮窗由前台服务持有，退到后台不被系统回收。
+         Android 14+ 需声明具体类型（见 service 的 specialUse）。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- Android 13+ 弹出前台服务通知需要此运行时权限（拒绝也不影响浮窗）。 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 全盘文件访问（MANAGE_EXTERNAL_STORAGE / "所有文件访问权限"）。
+         这是一项「高级」能力，默认对用户不可见、不申请，只有在设置 → 高级里
+         显式点开关、跳到系统页面手动授予后才生效；正常编辑依旧走 SAF 目录授权。
+
+         注意上架策略：Google Play 只允许「文件管理器 / 杀毒 / 备份」三类应用
+         声明此权限，编辑器声明会被拒审下架。因此本声明会在 release 构建里被
+         src/release/AndroidManifest.xml 用 tools:node="remove" 剥离，
+         只保留在 debug（自用）包里。-->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
+    <!-- Android 11 起要跳「所有文件访问」系统页面，需声明此查询，
+         否则 Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION
+         在某些 ROM 上会解析失败。-->
+    <queries>
+        <intent>
+            <action android:name="android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION" />
+        </intent>
+    </queries>
+</manifest>

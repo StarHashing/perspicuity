@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  启动图标（API 26+）。inset 用百分比，跟随 splash 图标安全区缩放。
+  见 base 版说明：避免 <bitmap gravity="center"> 的尺寸不确定陷阱。
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:inset="15%">
+    <bitmap
+        android:src="@mipmap/ic_launcher_foreground"
+        android:gravity="fill"
+        android:tint="@color/splash_icon_tint" />
+</inset>

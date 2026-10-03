@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Build & usage (README)
+    url: https://github.com/StarHashing/perspicuity#readme
+    about: Features and build-from-source instructions.
+  - name: Upstream MarkText for Android
+    url: https://github.com/Renakoni/marktext-android
+    about: The upstream project this fork builds upon — its docs and issues live there.

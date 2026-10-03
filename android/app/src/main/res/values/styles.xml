@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <!-- Customize your theme here. -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <!-- The activity root view's background, so the frame before the web layer
+             paints shows the splash colour instead of a black flash. -->
+        <item name="android:background">@color/splash_background</item>
+        <!--
+            targetSdk 36 默认强制 edge-to-edge（Android 15+），此时
+            android:statusBarColor 会被系统忽略、状态栏透明，页面顶部会直接
+            顶到状态栏底下 —— 顶部栏虽然是米黄，但状态栏区域会透出页面底色，
+            观感上仍是「白/透明」一条。本 App 的布局依赖系统 inset（CSS 用
+            env(safe-area-inset-top) 给顶部留白），是传统非沉浸式布局，
+            因此显式 opt-out 掉 edge-to-edge，让 statusBarColor 真正生效，
+            与米黄主题保持同一色块。API 35 以下该属性会被忽略，无副作用。
+        -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <!--
+            状态栏与 App 主体同色：默认 AppCompat 状态栏是纯白，顶部会突兀地
+            割出一条白带；这里改成米黄。windowLightStatusBar=true 表示状态栏
+            图标走深色，浅米黄底 + 深色图标才有足够对比。深色模式的底色由
+            values-night 覆盖。
+        -->
+        <item name="android:statusBarColor">@color/status_bar_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <!-- 底部导航栏同理沾上米黄，避免手势条区域突然变白。 -->
+        <item name="android:navigationBarColor">@color/status_bar_background</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <!--
+            启动图标背后的容器色。系统（Android 12+）默认给 splash 图标套一个
+            圆角方形「图标底板」；这里把它设成与背景同色，圆角方框就「看不见」
+            了，视觉上只剩品牌图形浮在米黄底上 —— 这是去掉「灰色圆角方框」的
+            关键一步。core-splashscreen 1.2.0 支持该属性。
+        -->
+        <item name="windowSplashScreenIconBackgroundColor">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+        <!-- 启动画面期间状态栏就用米黄，避免「白闪一下再变米黄」。 -->
+        <item name="android:statusBarColor">@color/status_bar_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/status_bar_background</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

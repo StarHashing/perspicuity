@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="splash_background">#1A1A1A</color>
+    <color name="splash_icon_tint">#CDD1D7</color>
+    <!-- 深色模式下状态栏随之变深，避免浅色底 + 深色内容的不协调。 -->
+    <color name="status_bar_background">#16181A</color>
+</resources>

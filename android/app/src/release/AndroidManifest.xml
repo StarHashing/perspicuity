@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 上架策略：release 包剥离 MANAGE_EXTERNAL_STORAGE。
+         Google Play 只允许文件管理器/杀毒/备份类应用声明全盘访问权限，
+         编辑器声明会被拒审。自用（debug）包保留该权限，可用「所有文件访问」
+         开关；上架包则完全不声明，只走 SAF 目录授权这条合规路径。 -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:node="remove" />
+
+    <application>
+        <activity android:name=".MainActivity" />
+    </application>
+</manifest>

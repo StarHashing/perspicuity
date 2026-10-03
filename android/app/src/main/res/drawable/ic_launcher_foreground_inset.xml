@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Perspicuity（澄怀）自适应图标前景。
+  foreground 位图已铺满 108dp 画布，这里 inset 12% 把它收进安全区，
+  兼顾「图形够大」与「圆角/水滴蒙版不裁到内容」。
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@mipmap/ic_launcher_foreground"
+    android:inset="12%" />

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 取自图标源图四角平均色，保证 adaptive 圆角裁切边缘无缝 -->
+    <color name="ic_launcher_background">#FAF4E0</color>
+</resources>
