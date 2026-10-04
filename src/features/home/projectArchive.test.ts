@@ -166,7 +166,6 @@ describe('projectArchive 导入', () => {
     const chapter = top[0]
     expect(childrenOf(nodes, chapter.id).map(node => node.name)).toEqual(['一.md'])
   })
-
   it('没有 manifest 时 parseProjectArchive 走目录结构推断', () => {
     const entries: ArchiveEntry[] = [
       { path: '本子/', content: '', isDirectory: true },
@@ -177,6 +176,38 @@ describe('projectArchive 导入', () => {
     expect(project.nodes.map(node => node.name)).toEqual(['伏笔.md'])
     expect(project.schemaVersion).toBe(2)
   })
+
+  it('nested 导入：文件内容随节点携带（供点击打开，而非误报授权失效）', () => {
+    const entries: ArchiveEntry[] = [
+      { path: '本子/', content: '', isDirectory: true },
+      { path: '本子/伏笔.md', content: '# 伏笔\n\n内容在这里。', isDirectory: false },
+    ]
+    const project = parseProjectArchive(entries)
+    const file = project.nodes.find(node => node.name === '伏笔.md')!
+    // 导入的虚拟文件没有磁盘 URI，但必须带着内容，编辑器才有东西可开。
+    expect(file.fileRef).toBeNull()
+    expect(file.content).toBe('# 伏笔\n\n内容在这里。')
+  })
+
+  it('flat 导入：manifest 描述的文件同样带上正文内容', () => {
+    const entries: ArchiveEntry[] = [
+      {
+        path: '本子/manifest.json',
+        content: JSON.stringify({
+          format: 'perspicuity-project',
+          schemaVersion: ARCHIVE_SCHEMA_VERSION,
+          projectName: '本子',
+          nodes: [{ path: '本子/files/001-伏笔.md', name: '伏笔.md', kind: 'file', parentIndex: -1 }],
+        }),
+        isDirectory: false,
+      },
+      { path: '本子/files/001-伏笔.md', content: '正文', isDirectory: false },
+    ]
+    const project = parseProjectArchive(entries)
+    const file = project.nodes.find(node => node.name === '伏笔.md')!
+    expect(file.content).toBe('正文')
+  })
+
 
   it('空归档也能得到合法的空项目', () => {
     const project = parseProjectArchive([])

@@ -64,6 +64,7 @@ import {
 import { projectTreeText } from './projectTreeText'
 import { useLongPress } from './useLongPress'
 import { appLogger } from '../../lib/logger'
+import type { WorkspaceOpenResult } from '../../lib/workspace'
 import PromptDialog from './PromptDialog.vue'
 import type { PromptDialogApi } from './PromptDialog.vue'
 
@@ -75,6 +76,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   /** 打开文件：把 SAF 结果透传给上层（复用 FilesTab 的通道）。 */
   openIndexedFile: [uri: string]
+  /** 打开导入归档来的虚拟文件：内容在内存里，直接交给编辑器。 */
+  openArchivedFile: [payload: WorkspaceOpenResult]
 }>()
 
 const { locale } = useI18n()
@@ -1384,11 +1387,27 @@ function rejectionText(reason?: string) {
 
 /** 触发原生文件打开。 */
 async function openFile(node: ProjectNode) {
-  if (!node.fileRef) {
-    notice.value = T.value.permissionLost
+  // 1) 外部索引文件（真实磁盘上的文件，有 SAF 授权）：走原生读取通道。
+  if (node.fileRef) {
+    emit('openIndexedFile', node.fileRef.uri)
     return
   }
-  emit('openIndexedFile', node.fileRef.uri)
+  // 2) 导入归档来的虚拟文件：内容随项目存在内存里，没有磁盘 URI。
+  //    直接合成一个打开结果交给编辑器，不再误报「授权已失效」。
+  if (typeof node.content === 'string') {
+    emit('openArchivedFile', {
+      sourceUri: '',
+      displayName: node.name,
+      markdown: node.content,
+      encoding: 'utf-8',
+      providerName: '',
+      canWrite: false,
+      persisted: false,
+    })
+    return
+  }
+  // 3) 既无 fileRef 又无内容：真正无法定位（历史坏数据 / 授权确实丢了）。
+  notice.value = T.value.permissionLost
 }
 
 /** 是否为拖拽悬停的目标行（用于高亮）。 */

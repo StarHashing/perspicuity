@@ -41,6 +41,16 @@ export interface ProjectNode {
    */
   fileRef?: ProjectFileRef | null
   /**
+   * 仅「导入归档」来的文件节点会带：归档里读出的文本内容。
+   *
+   * 导入的 zip 项目是**纯内存虚拟树**——文件内容在归档里，导入后并不对应
+   * 磁盘上任何一个真实文件，也就没有 SAF URI（fileRef）。把内容直接挂在节点
+   * 上，点击时才能打开编辑器查看，而不是误报「授权已失效」。
+   *
+   * 与 fileRef 互斥：有 fileRef 的文件读真实磁盘；有 content 的文件读内存。
+   */
+  content?: string | null
+  /**
    * 仅「绑定实体目录」的镜像目录节点会带：该目录在硬盘上的 document URI。
    *
    * 有了它，双向可写时才能直接在这个 URI 下 createDocument / moveDocument，
@@ -535,7 +545,11 @@ function parseNode(raw: unknown): ProjectNode | null {
       : 0,
     expanded: candidate.expanded !== false,
     ...(kind === 'file'
-      ? { fileRef: parseFileRef(candidate.fileRef) }
+      ? {
+          fileRef: parseFileRef(candidate.fileRef),
+          // 导入归档来的虚拟文件：内容随项目持久化，重启后仍能打开。
+          ...(typeof candidate.content === 'string' ? { content: candidate.content } : {}),
+        }
       : // 镜像目录的实体 URI 必须持久化，否则重启后无法再对它写盘。
         typeof candidate.dirUri === 'string' && candidate.dirUri.length > 0
         ? { dirUri: candidate.dirUri }

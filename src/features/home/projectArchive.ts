@@ -204,7 +204,18 @@ function baseName(path: string): string {
  * manifest.nodes 已按父在前排序；为稳健起见这里做一次拓扑展开——
  * 先解析所有目录，再解析文件，保证父节点一定先于子节点被创建。
  */
-export function nodesFromManifest(manifest: ArchiveManifest): ProjectNode[] {
+export function nodesFromManifest(
+  manifest: ArchiveManifest,
+  entries: readonly ArchiveEntry[] = [],
+): ProjectNode[] {
+  // 归档里「路径 → 文本内容」。导入后的文件节点直接携带内容，
+  // 这样点击文件才能打开编辑器，而不是报「授权已失效」。
+  const contentByPath = new Map<string, string>()
+  for (const entry of entries) {
+    if (!entry.isDirectory) {
+      contentByPath.set(entry.path, entry.content)
+    }
+  }
   const nodes: ProjectNode[] = []
   const idByIndex = new Map<number, string>()
   const orderByParent = new Map<string | null, number>()
@@ -216,7 +227,13 @@ export function nodesFromManifest(manifest: ArchiveManifest): ProjectNode[] {
   }
 
   // 两遍：目录优先。parentIndex 指向的节点若还没建，视为挂在根（容错）。
-  const make = (index: number, kind: 'folder' | 'file', name: string, parentIndex: number) => {
+  const make = (
+    index: number,
+    kind: 'folder' | 'file',
+    name: string,
+    parentIndex: number,
+    content?: string,
+  ) => {
     const parentId = parentIndex >= 0 ? idByIndex.get(parentIndex) ?? null : null
     const id = createNodeId()
     idByIndex.set(index, id)
@@ -229,6 +246,7 @@ export function nodesFromManifest(manifest: ArchiveManifest): ProjectNode[] {
       order: nextOrder(parentId),
       expanded: true,
       fileRef: null,
+      ...(kind === 'file' ? { content: content ?? '' } : {}),
     })
   }
 
@@ -239,7 +257,13 @@ export function nodesFromManifest(manifest: ArchiveManifest): ProjectNode[] {
   })
   manifest.nodes.forEach((entry, index) => {
     if (entry.kind === 'file') {
-      make(index, 'file', entry.name || baseName(entry.path) || 'untitled.md', entry.parentIndex)
+      make(
+        index,
+        'file',
+        entry.name || baseName(entry.path) || 'untitled.md',
+        entry.parentIndex,
+        contentByPath.get(entry.path) ?? '',
+      )
     }
   })
   return nodes
@@ -323,6 +347,8 @@ export function nodesFromNested(entries: ArchiveEntry[]): { nodes: ProjectNode[]
       order: nextOrder(parentId),
       expanded: true,
       fileRef: null,
+      // 内容随节点携带：导入的虚拟文件没有磁盘 URI，只能靠内存内容打开。
+      content: entry.content,
     })
   }
   return { nodes, rootName }
@@ -344,7 +370,7 @@ export function parseProjectArchive(entries: ArchiveEntry[]): ProjectRecord {
         name: manifest.projectName?.trim() || '导入的项目',
         pinned: false,
         expanded: true,
-        nodes: nodesFromManifest(manifest),
+        nodes: nodesFromManifest(manifest, entries),
         createdAt: new Date().toISOString(),
         schemaVersion: 2,
       }

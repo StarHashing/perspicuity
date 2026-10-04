@@ -302,6 +302,7 @@ onMounted(() => {
     <ProjectTreePanel
       :disabled="busy || !supportsWorkspaces"
       @open-indexed-file="openIndexedFileByUri"
+      @open-archived-file="payload => emit('openWorkspaceFile', payload)"
     />
 
     <!-- 搜索结果 -->
