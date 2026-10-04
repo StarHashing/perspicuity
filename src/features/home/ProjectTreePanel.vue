@@ -12,8 +12,10 @@ import {
   checkWorkspacePermission,
   createWorkspaceDirectory,
   createWorkspaceFile,
+  deletePrivateProject,
   deleteWorkspaceDocument,
   getWorkspaceErrorCode,
+  importProjectToPrivate,
   isWorkspaceAvailable,
   listWorkspaceDocuments,
   probeWorkspaceWrite,
@@ -43,6 +45,7 @@ import {
   childrenOf,
   createFileNode,
   createFolderNode,
+  createProjectId,
   createProjectRecord,
   findNode,
   isBoundProject,
@@ -1052,10 +1055,18 @@ async function importProjectArchive() {
  *
  * 手动「导入项目」和「外部分享打开」两条路径共用这里，保证行为一致。
  * 格式判断始终靠 parseProjectArchive 拆内部结构，不信扩展名。
+ *
+ * 落盘策略：导入时把整树写进 App 私有目录（`perspicuity-private://<id>/…`），
+ * 文件节点持有 source:'private' 的 fileRef，读写都走真实磁盘——从而能编辑、
+ * 能保存、能正常返回。落盘失败（非原生环境）时降级为旧的「纯内存虚拟树」。
  */
 async function ingestArchive(uri: string): Promise<void> {
   const result = await readArchiveFromFile(uri)
-  const project = parseProjectArchive(result.entries)
+  // 生成一个稳定 id 作为私有目录名；sanitizeProjectId 会把非法字符洗掉。
+  const privateProjectId = createProjectId()
+  const landed = await importProjectToPrivate(privateProjectId, result.entries)
+  // 落盘成功才把文件节点指向私有副本；否则退回内存方案（不阻塞导入）。
+  const project = parseProjectArchive(result.entries, landed ? privateProjectId : null)
   projects.value = upsertProject(projects.value, project)
   persist()
   activeProjectId.value = project.id
@@ -1114,6 +1125,10 @@ async function removeMenuNode() {
     if (confirmed) {
       projects.value = removeProject(projects.value, project.id)
       persist()
+      // 私有导入项目：顺带清掉它在 App 私有目录里的整份副本，避免残留占空间。
+      if (project.privateRoot) {
+        void deletePrivateProject(project.privateRoot)
+      }
       if (activeProjectId.value === project.id) {
         activeProjectId.value = projects.value.length ? sortedProjects.value[0].id : null
       }
@@ -1387,13 +1402,16 @@ function rejectionText(reason?: string) {
 
 /** 触发原生文件打开。 */
 async function openFile(node: ProjectNode) {
-  // 1) 外部索引文件（真实磁盘上的文件，有 SAF 授权）：走原生读取通道。
+  // 1) 有 fileRef 的文件（外部索引 / 私有副本 / 项目内新建）：统一交给上层，
+  //    由它按 sourceUri 的 scheme 分流到 SAF 或 App 私有目录读取通道。
+  //    私有副本的 uri 形如 `perspicuity-private://<id>/<rel>`，读写都走真实
+  //    磁盘，故打开后 canWrite 恒为 true——彻底告别「返回时保存失败」。
   if (node.fileRef) {
     emit('openIndexedFile', node.fileRef.uri)
     return
   }
-  // 2) 导入归档来的虚拟文件：内容随项目存在内存里，没有磁盘 URI。
-  //    直接合成一个打开结果交给编辑器，不再误报「授权已失效」。
+  // 2) 内存兜底内容（仅历史导入数据 / 落盘失败时才走到这里）：内容随项目
+  //    存在内存里，没有磁盘 URI。直接合成一个打开结果交给编辑器。
   if (typeof node.content === 'string') {
     emit('openArchivedFile', {
       sourceUri: '',

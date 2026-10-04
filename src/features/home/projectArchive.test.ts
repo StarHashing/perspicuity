@@ -208,6 +208,56 @@ describe('projectArchive 导入', () => {
     expect(file.content).toBe('正文')
   })
 
+  it('私有模式（nested）：文件节点带 source:private 的 fileRef，指向落盘路径', () => {
+    const entries: ArchiveEntry[] = [
+      { path: '本子/', content: '', isDirectory: true },
+      { path: '本子/大纲/伏笔.md', content: '正文', isDirectory: false },
+    ]
+    const project = parseProjectArchive(entries, 'project-abc')
+    expect(project.privateRoot).toBe('project-abc')
+    const file = project.nodes.find(node => node.name === '伏笔.md')!
+    expect(file.content).toBeUndefined()
+    expect(file.fileRef?.source).toBe('private')
+    expect(file.fileRef?.uri).toBe('perspicuity-private://project-abc/本子/大纲/伏笔.md')
+    expect(file.fileRef?.persisted).toBe(true)
+  })
+
+  it('私有模式（flat）：fileRef 的 uri 与归档条目路径逐字符一致', () => {
+    const entries: ArchiveEntry[] = [
+      {
+        path: '本子/manifest.json',
+        content: JSON.stringify({
+          format: 'perspicuity-project',
+          schemaVersion: ARCHIVE_SCHEMA_VERSION,
+          projectName: '本子',
+          nodes: [
+            { path: '', name: '大纲', kind: 'folder', parentIndex: -1 },
+            { path: '本子/files/001-伏笔.md', name: '伏笔.md', kind: 'file', parentIndex: 0 },
+          ],
+        }),
+        isDirectory: false,
+      },
+      { path: '本子/files/001-伏笔.md', content: '正文', isDirectory: false },
+    ]
+    const project = parseProjectArchive(entries, 'project-xyz')
+    const file = project.nodes.find(node => node.name === '伏笔.md')!
+    // 关键：uri = 私有 scheme + 归档条目原始路径（原生正是按这个路径落盘）。
+    expect(file.fileRef?.uri).toBe('perspicuity-private://project-xyz/本子/files/001-伏笔.md')
+    expect(file.fileRef?.fileName).toBe('伏笔.md')
+  })
+
+  it('不传 privateProjectId 时仍是内存兜底模式（向后兼容）', () => {
+    const entries: ArchiveEntry[] = [
+      { path: '本子/', content: '', isDirectory: true },
+      { path: '本子/伏笔.md', content: '正文', isDirectory: false },
+    ]
+    const project = parseProjectArchive(entries)
+    expect(project.privateRoot).toBeUndefined()
+    const file = project.nodes.find(node => node.name === '伏笔.md')!
+    expect(file.fileRef).toBeNull()
+    expect(file.content).toBe('正文')
+  })
+
 
   it('空归档也能得到合法的空项目', () => {
     const project = parseProjectArchive([])

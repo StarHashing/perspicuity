@@ -1422,6 +1422,289 @@ public class WorkspacePlugin extends Plugin {
         });
     }
 
+    // ---------------------------------------------------------------------
+    // 私有目录项目：把导入的项目整树落盘到 App 私有目录
+    //
+    // 背景：此前导入的 zip 项目是「纯内存虚拟树」——文件内容挂在节点上，没有
+    // 磁盘 URI。于是点击打开后：能看不能存、返回时走保存流程 → 命中
+    // missing-source → 「Save failed」且退不出编辑器。
+    //
+    // 现在改为：导入时把整棵项目树写进 getFilesDir()/projects/<projectId>/，
+    // 每个文件节点持有相对路径。读写都走真实 File IO，canWrite 恒为 true，
+    // 编辑器保存 / 返回 / 重启全部复用既有 SAF 文档链路，无需另造状态机。
+    //
+    // 与 SAF 的区别：私有目录在卸载 App 时随数据一起消失（这是「副本」的固有
+    // 语义），换来的好处是永不因系统清理授权而失联。source='private' 正指此。
+    //
+    // 合成的 sourceUri 用自定义 scheme `perspicuity-private://<projectId>/<relPath>`，
+    // 前端据此前缀判断该走 writePrivateFile 而非 SAF 写回。
+    // ---------------------------------------------------------------------
+
+    /** 私有项目 sourceUri 的 scheme 前缀（前端据此路由读写）。 */
+    private static final String PRIVATE_SCHEME = "perspicuity-private://";
+
+    /** 项目 id 只保留安全字符，防止路径穿越与非法目录名。 */
+    private String sanitizeProjectId(String value) {
+        if (value == null) {
+            return "";
+        }
+        // 去掉一切路径分隔符与 .. 序列，只留字母数字与 -/_。
+        String cleaned = value.replaceAll("[^A-Za-z0-9_-]", "");
+        return cleaned.length() > 64 ? cleaned.substring(0, 64) : cleaned;
+    }
+
+    /**
+     * 把相对路径安全地解析为私有目录下的绝对 File。
+     *
+     * 逐段校验：拒绝空段、`.`、`..`、以及任何包含分隔符的段，防止越权写出
+     * 到 projects/ 目录之外。解析结果必须仍在项目根目录之内。
+     */
+    private java.io.File resolvePrivateFile(String projectId, String relPath) throws java.io.IOException {
+        String safeId = sanitizeProjectId(projectId);
+        if (safeId.isEmpty()) {
+            throw new java.io.IOException("Invalid project id");
+        }
+        java.io.File projectRoot = new java.io.File(getPrivateProjectsRoot(), safeId);
+        String rel = relPath == null ? "" : relPath.replace('\\', '/');
+        // 兼容前端把整个 sourceUri 传进来的情况：只取路径部分。
+        int schemeAt = rel.indexOf(PRIVATE_SCHEME);
+        if (schemeAt >= 0) {
+            rel = rel.substring(schemeAt + PRIVATE_SCHEME.length());
+            int slash = rel.indexOf('/');
+            rel = slash >= 0 ? rel.substring(slash + 1) : "";
+        }
+        java.io.File target = projectRoot;
+        for (String segment : rel.split("/")) {
+            if (segment.isEmpty() || ".".equals(segment) || "..".equals(segment)) {
+                continue;
+            }
+            if (segment.indexOf(':') >= 0) {
+                throw new java.io.IOException("Illegal path segment");
+            }
+            target = new java.io.File(target, segment);
+        }
+        // 兜底：确认解析结果仍在项目根之下（防御符号链接等异常情况）。
+        String rootPath = projectRoot.getCanonicalPath();
+        String targetPath = target.getCanonicalPath();
+        if (!targetPath.equals(rootPath) && !targetPath.startsWith(rootPath + java.io.File.separator)) {
+            throw new java.io.IOException("Path escapes the private project root");
+        }
+        return target;
+    }
+
+    private java.io.File getPrivateProjectsRoot() {
+        return new java.io.File(getContext().getFilesDir(), "projects");
+    }
+
+    /** 把整棵导入树写进私有目录，返回落盘后的每个文件相对路径清单。 */
+    @PluginMethod
+    public void importProjectToPrivate(PluginCall call) {
+        String projectId = call.getString("projectId");
+        JSArray entries = call.getArray("entries");
+        if (projectId == null || projectId.isEmpty()) {
+            call.reject("A project id is required", "INVALID_ARGUMENT");
+            return;
+        }
+        if (entries == null) {
+            call.reject("Archive entries are required", "INVALID_ARGUMENT");
+            return;
+        }
+        final String safeId = sanitizeProjectId(projectId);
+        if (safeId.isEmpty()) {
+            call.reject("Invalid project id", "INVALID_ARGUMENT");
+            return;
+        }
+        final List<ProjectArchiveCodec.ArchiveEntry> parsed;
+        try {
+            parsed = ProjectArchiveCodec.fromJsArray(entries);
+        } catch (org.json.JSONException ex) {
+            call.reject("The project entries could not be parsed", "INVALID_ARGUMENT", ex);
+            return;
+        }
+        runOffMainThread(call, () -> {
+            java.io.File projectRoot = new java.io.File(getPrivateProjectsRoot(), safeId);
+            // 重导同名项目：先清空旧目录，避免残留上一份导入的多余文件。
+            deleteRecursively(projectRoot);
+            if (!projectRoot.mkdirs() && !projectRoot.isDirectory()) {
+                throw new java.io.IOException("Could not create the private project directory");
+            }
+            JSArray written = new JSArray();
+            for (ProjectArchiveCodec.ArchiveEntry entry : parsed) {
+                java.io.File target = resolvePrivateFile(safeId, entry.path);
+                if (entry.isDirectory) {
+                    if (!target.mkdirs() && !target.isDirectory()) {
+                        throw new java.io.IOException("Could not create a private project folder");
+                    }
+                    continue;
+                }
+                java.io.File parent = target.getParentFile();
+                if (parent != null && !parent.mkdirs() && !parent.isDirectory()) {
+                    throw new java.io.IOException("Could not create a private project folder");
+                }
+                byte[] bytes = MarkdownCodec.encode(
+                    entry.content == null ? "" : entry.content,
+                    new MarkdownWriteOptions(defaultMarkdownEncoding, false)
+                );
+                writeBytesAtomically(target, bytes);
+                written.put(entry.path);
+            }
+            JSObject payload = new JSObject();
+            payload.put("ok", true);
+            payload.put("projectId", safeId);
+            payload.put("rootPath", projectRoot.getAbsolutePath());
+            payload.put("files", written);
+            return payload;
+        });
+    }
+
+    /** 读私有项目里的一个文件，返回与 SAF 打开同构的载荷。 */
+    @PluginMethod
+    public void readPrivateFile(PluginCall call) {
+        String projectId = call.getString("projectId");
+        String relPath = call.getString("relPath");
+        if (projectId == null || projectId.isEmpty() || relPath == null || relPath.isEmpty()) {
+            call.reject("A project id and relative path are required", "INVALID_ARGUMENT");
+            return;
+        }
+        final String id = projectId;
+        final String path = relPath;
+        runOffMainThread(call, () -> {
+            java.io.File target = resolvePrivateFile(id, path);
+            if (!target.isFile()) {
+                throw new DocumentReadException(
+                    "PRIVATE_FILE_MISSING",
+                    "This project file is no longer available",
+                    null
+                );
+            }
+            byte[] bytes;
+            try (java.io.InputStream in = new java.io.FileInputStream(target)) {
+                bytes = readAllBytesBounded(in, MAX_DOCUMENT_BYTES);
+            }
+            DecodedMarkdown decoded = MarkdownCodec.decode(
+                bytes,
+                defaultMarkdownEncoding,
+                autoDetectMarkdownEncoding,
+                workspaceCharsetSniffer
+            );
+            JSObject payload = new JSObject();
+            payload.put("canceled", false);
+            payload.put("sourceUri", buildPrivateUri(id, path));
+            payload.put("displayName", target.getName());
+            payload.put("providerName", "private");
+            payload.put("canWrite", true);
+            payload.put("persisted", true);
+            // 私有目录没有可用的外部「相对图片锚点」——置空由前端跳过。
+            payload.put("dirPath", "");
+            payload.put("markdown", decoded.markdown);
+            payload.put("encoding", MarkdownCodec.normalizeEncoding(decoded.encoding));
+            payload.put("hasEncodingBom", decoded.hasBom);
+            return payload;
+        });
+    }
+
+    /** 原子写回私有项目里的一个文件（backup + rollback，风格与 writeByUri 一致）。 */
+    @PluginMethod
+    public void writePrivateFile(PluginCall call) {
+        String projectId = call.getString("projectId");
+        String relPath = call.getString("relPath");
+        String markdown = call.getString("markdown");
+        if (projectId == null || projectId.isEmpty() || relPath == null || relPath.isEmpty()) {
+            call.reject("A project id and relative path are required", "INVALID_ARGUMENT");
+            return;
+        }
+        final String id = projectId;
+        final String path = relPath;
+        final String content = markdown == null ? "" : markdown;
+        final String encoding = normalizeRequestedEncoding(call.getString("encoding"));
+        runOffMainThread(call, () -> {
+            java.io.File target = resolvePrivateFile(id, path);
+            java.io.File parent = target.getParentFile();
+            if (parent != null && !parent.mkdirs() && !parent.isDirectory()) {
+                throw new java.io.IOException("Could not create a private project folder");
+            }
+            byte[] bytes = MarkdownCodec.encode(content, new MarkdownWriteOptions(encoding, false));
+            writeBytesAtomically(target, bytes);
+            JSObject payload = new JSObject();
+            payload.put("ok", true);
+            payload.put("size", bytes.length);
+            return payload;
+        });
+    }
+
+    /** 删除整个私有项目目录（删除项目 / 重新导入时调用）。 */
+    @PluginMethod
+    public void deletePrivateProject(PluginCall call) {
+        String projectId = call.getString("projectId");
+        if (projectId == null || projectId.isEmpty()) {
+            call.reject("A project id is required", "INVALID_ARGUMENT");
+            return;
+        }
+        final String safeId = sanitizeProjectId(projectId);
+        runOffMainThread(call, () -> {
+            java.io.File projectRoot = new java.io.File(getPrivateProjectsRoot(), safeId);
+            deleteRecursively(projectRoot);
+            JSObject payload = new JSObject();
+            payload.put("ok", true);
+            return payload;
+        });
+    }
+
+    private String buildPrivateUri(String projectId, String relPath) {
+        String rel = relPath == null ? "" : relPath.replace('\\', '/');
+        while (rel.startsWith("/")) {
+            rel = rel.substring(1);
+        }
+        return PRIVATE_SCHEME + sanitizeProjectId(projectId) + "/" + rel;
+    }
+
+    /** 带 backup + rollback 的原子写：先写临时文件，成功再替换，失败回滚。 */
+    private void writeBytesAtomically(java.io.File target, byte[] bytes) throws java.io.IOException {
+        java.io.File dir = target.getParentFile();
+        if (dir != null && !dir.exists() && !dir.mkdirs()) {
+            throw new java.io.IOException("Could not create the target directory");
+        }
+        java.io.File tmp = new java.io.File(
+            target.getAbsolutePath() + ".tmp-" + System.currentTimeMillis()
+        );
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(tmp)) {
+            out.write(bytes);
+            out.flush();
+        } catch (java.io.IOException ex) {
+            // 清理半截临时文件后重抛。
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            throw ex;
+        }
+        if (target.exists() && !target.delete()) {
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            throw new java.io.IOException("Could not replace the existing private file");
+        }
+        if (!tmp.renameTo(target)) {
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            throw new java.io.IOException("Could not finalize the private file write");
+        }
+    }
+
+    /** 递归删除目录 / 文件；不存在时静默返回。 */
+    private void deleteRecursively(java.io.File file) {
+        if (file == null || !file.exists()) {
+            return;
+        }
+        if (file.isDirectory()) {
+            java.io.File[] children = file.listFiles();
+            if (children != null) {
+                for (java.io.File child : children) {
+                    deleteRecursively(child);
+                }
+            }
+        }
+        //noinspection ResultOfMethodCallIgnored
+        file.delete();
+    }
+
     /** 归档文件名只保留安全字符，强制 .zip 后缀。 */
     private String sanitizeArchiveName(String value) {
         String cleaned = value.replaceAll("[\\\\/:*?\"<>|]", "_").trim();

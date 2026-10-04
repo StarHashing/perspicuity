@@ -41,13 +41,17 @@ export interface ProjectNode {
    */
   fileRef?: ProjectFileRef | null
   /**
-   * 仅「导入归档」来的文件节点会带：归档里读出的文本内容。
+   * 文件节点的**内存兜底内容**。
    *
-   * 导入的 zip 项目是**纯内存虚拟树**——文件内容在归档里，导入后并不对应
-   * 磁盘上任何一个真实文件，也就没有 SAF URI（fileRef）。把内容直接挂在节点
-   * 上，点击时才能打开编辑器查看，而不是误报「授权已失效」。
+   * 历史由来：早期导入的 zip 项目被做成「纯内存虚拟树」——文件内容随归档
+   * 记在节点上，没有磁盘 URI。该方案有个致命缺陷：打开后按返回会走「保存
+   * 文档」链路，而无 sourceUri 必然失败，于是卡在编辑器里退不出。
    *
-   * 与 fileRef 互斥：有 fileRef 的文件读真实磁盘；有 content 的文件读内存。
+   * 现架构已改为「导入即落盘 App 私有目录」：导入文件节点带 source:'private'
+   * 的 fileRef，读写都走真实磁盘。本字段仅在落盘失败时作为降级兜底保留，
+   * 正常路径下导入文件不再设置它。
+   *
+   * 与 fileRef 互斥：有 fileRef 的文件读真实磁盘；只有 content 的文件读内存。
    */
   content?: string | null
   /**
@@ -104,6 +108,14 @@ export interface ProjectRecord {
    * 可选字段，老数据（v2 无此字段）解析后为 null。
    */
   boundTree?: ProjectBoundTree | null
+  /**
+   * 「导入即落盘」项目在 App 私有目录里的根标识（= 私有目录名）。
+   *
+   * 导入 zip 项目时会整树写进 `getFilesDir()/projects/<privateRoot>/`，这里
+   * 记下 privateRoot 以便：删项目时清理私有目录、判断该项目是否为私有导入。
+   * 纯虚拟项目 / 绑定目录项目为 null/缺省。
+   */
+  privateRoot?: string | null
 }
 
 export interface ProjectStorage {
@@ -130,7 +142,12 @@ export function createProjectId(seed: number = Date.now()): string {
 /** 新建一个空项目。 */
 export function createProjectRecord(
   name: string,
-  options: { pinned?: boolean; createdAt?: string; boundTree?: ProjectBoundTree | null } = {},
+  options: {
+    pinned?: boolean
+    createdAt?: string
+    boundTree?: ProjectBoundTree | null
+    privateRoot?: string | null
+  } = {},
 ): ProjectRecord {
   return {
     id: createProjectId(),
@@ -141,6 +158,7 @@ export function createProjectRecord(
     createdAt: options.createdAt ?? new Date().toISOString(),
     schemaVersion: PROJECT_SCHEMA_VERSION,
     boundTree: options.boundTree ?? null,
+    privateRoot: options.privateRoot ?? null,
   }
 }
 
@@ -626,6 +644,9 @@ export function parseProjects(value: string | null): ProjectRecord[] {
           : new Date().toISOString(),
       schemaVersion: PROJECT_SCHEMA_VERSION,
       ...(boundTree ? { boundTree } : {}),
+      ...(typeof candidate.privateRoot === 'string' && candidate.privateRoot.length > 0
+        ? { privateRoot: candidate.privateRoot }
+        : {}),
     })
   }
   return projects
@@ -747,6 +768,27 @@ export function toIndexedFileRef(file: { uri: string; name: string }): ProjectFi
     providerName: file.uri.split('/')[2] ?? '',
     persisted: true,
     source: 'indexed',
+  }
+}
+
+/**
+ * 为「App 私有目录里的项目副本」构造 fileRef。
+ *
+ * 与 toIndexedFileRef 的区别：uri 不是 SAF document URI，而是私有 scheme
+ * `perspicuity-private://<projectId>/<relPath>`；source 为 'private'。因为
+ * 副本在 App 自己的私有目录里，权限恒持久、恒可写，故 persisted=true。
+ */
+export function toPrivateFileRef(
+  projectId: string,
+  relPath: string,
+  fileName?: string,
+): ProjectFileRef {
+  return {
+    uri: `perspicuity-private://${projectId}/${relPath}`,
+    fileName: fileName ?? relPath.split('/').pop() ?? relPath,
+    providerName: 'private',
+    persisted: true,
+    source: 'private',
   }
 }
 

@@ -4,6 +4,12 @@ import {
   type AndroidMarkdownSettings,
   type MarkdownEncoding,
 } from '../features/settings/advancedSettings'
+import {
+  isPrivateProjectUri,
+  parsePrivateProjectUri,
+  readPrivateProjectFile,
+  writePrivateProjectFile,
+} from './workspace'
 
 export interface OpenedAndroidDocument {
   canceled?: false
@@ -255,6 +261,31 @@ export async function readAndroidMarkdownDocument(
   sourceUri: string,
   options: AndroidReadOptions = {},
 ) {
+  // 私有项目副本：uri 是自定义 scheme，原生 SAF 管道认不了，改走私有目录读。
+  if (isPrivateProjectUri(sourceUri)) {
+    const parsed = parsePrivateProjectUri(sourceUri)
+    if (!parsed) {
+      throw new AndroidDocumentError('INVALID_DOCUMENT_RESULT', 'Invalid private project uri')
+    }
+    const result = await readPrivateProjectFile(parsed.projectId, parsed.relPath)
+    if (!result) {
+      throw new AndroidDocumentError('READ_FAILED', 'Could not read private project file')
+    }
+    return normalizeOpenedDocument({
+      canceled: false,
+      sourceUri: result.sourceUri,
+      displayName: result.displayName,
+      providerName: result.providerName ?? null,
+      pathHint: null,
+      dirPath: result.dirPath ?? null,
+      mimeType: 'text/markdown',
+      markdown: result.markdown,
+      encoding: normalizeMarkdownEncodingValue(result.encoding),
+      hasEncodingBom: Boolean(result.hasEncodingBom),
+      canWrite: result.canWrite,
+      persisted: result.persisted,
+    } as OpenedAndroidDocument)
+  }
   ensureAndroidDocumentsAvailable()
   return normalizeOpenedDocument(await AndroidDocuments.readMarkdownDocument({ sourceUri, ...options }))
 }
@@ -264,6 +295,35 @@ export async function writeAndroidMarkdownDocument(
   markdown: string,
   options: AndroidWriteOptions,
 ) {
+  // 私有项目副本：写回私有目录内的真实文件（原生原子写），而非 SAF 管道。
+  if (isPrivateProjectUri(sourceUri)) {
+    const parsed = parsePrivateProjectUri(sourceUri)
+    if (!parsed) {
+      throw new AndroidDocumentError('INVALID_DOCUMENT_RESULT', 'Invalid private project uri')
+    }
+    const saved = await writePrivateProjectFile(
+      parsed.projectId,
+      parsed.relPath,
+      markdown,
+      options.encoding,
+    )
+    if (!saved.ok) {
+      throw new AndroidDocumentError('WRITE_FAILED', 'Could not write private project file')
+    }
+    // 回一个与 SAF 保存同构的结果，让上层状态机无需分支。
+    const name = parsed.relPath.split('/').pop() ?? parsed.relPath
+    return normalizeSavedDocument({
+      sourceUri,
+      displayName: name,
+      providerName: 'private',
+      pathHint: null,
+      mimeType: 'text/markdown',
+      encoding: normalizeMarkdownEncodingValue(options.encoding),
+      hasEncodingBom: Boolean(options.writeBom),
+      canWrite: true,
+      persisted: true,
+    } as SavedAndroidDocument)
+  }
   ensureAndroidDocumentsAvailable()
   return normalizeSavedDocument(
     await AndroidDocuments.writeMarkdownDocument({

@@ -19,6 +19,7 @@ import {
   createProjectId,
   findNode,
   nodePath,
+  toPrivateFileRef,
   type ProjectNode,
   type ProjectRecord,
 } from './projectStore'
@@ -203,17 +204,23 @@ function baseName(path: string): string {
  *
  * manifest.nodes 已按父在前排序；为稳健起见这里做一次拓扑展开——
  * 先解析所有目录，再解析文件，保证父节点一定先于子节点被创建。
+ *
+ * @param privateProjectId 传入时，文件节点带 source:'private' 的 fileRef，
+ *   uri 指向私有目录内该文件（`perspicuity-private://<id>/<entry.path>`）；
+ *   为 null/缺省时退回「内容随节点携带」的内存方案（旧行为，仅作兜底）。
  */
 export function nodesFromManifest(
   manifest: ArchiveManifest,
   entries: readonly ArchiveEntry[] = [],
+  privateProjectId: string | null = null,
 ): ProjectNode[] {
-  // 归档里「路径 → 文本内容」。导入后的文件节点直接携带内容，
-  // 这样点击文件才能打开编辑器，而不是报「授权已失效」。
+  // 归档里「路径 → 文本内容」。仅在非私有（内存兜底）模式下才需要。
   const contentByPath = new Map<string, string>()
-  for (const entry of entries) {
-    if (!entry.isDirectory) {
-      contentByPath.set(entry.path, entry.content)
+  if (!privateProjectId) {
+    for (const entry of entries) {
+      if (!entry.isDirectory) {
+        contentByPath.set(entry.path, entry.content)
+      }
     }
   }
   const nodes: ProjectNode[] = []
@@ -232,6 +239,7 @@ export function nodesFromManifest(
     kind: 'folder' | 'file',
     name: string,
     parentIndex: number,
+    filePath?: string,
     content?: string,
   ) => {
     const parentId = parentIndex >= 0 ? idByIndex.get(parentIndex) ?? null : null
@@ -245,8 +253,11 @@ export function nodesFromManifest(
       pinned: false,
       order: nextOrder(parentId),
       expanded: true,
-      fileRef: null,
-      ...(kind === 'file' ? { content: content ?? '' } : {}),
+      ...(kind === 'file'
+        ? privateProjectId && filePath
+          ? { fileRef: toPrivateFileRef(privateProjectId, filePath, name) }
+          : { fileRef: null, content: content ?? '' }
+        : { fileRef: null }),
     })
   }
 
@@ -262,6 +273,7 @@ export function nodesFromManifest(
         'file',
         entry.name || baseName(entry.path) || 'untitled.md',
         entry.parentIndex,
+        entry.path,
         contentByPath.get(entry.path) ?? '',
       )
     }
@@ -274,8 +286,16 @@ export function nodesFromManifest(
  *
  * entries 里的路径形如 `<项目名>/大纲类/世界观/剧情.md`，取第一段作为根目录名，
  * 其余逐级建目录，最后一段建文件。
+ *
+ * @param privateProjectId 传入时，文件节点带 source:'private' 的 fileRef，
+ *   uri = `perspicuity-private://<id>/<entry.path>`（entry.path 原样，含项目根
+ *   段——与原生落盘时写入私有目录的相对路径一致）。为 null/缺省时退回内存
+ *   方案（内容随节点携带，旧行为）。
  */
-export function nodesFromNested(entries: ArchiveEntry[]): { nodes: ProjectNode[]; rootName: string | null } {
+export function nodesFromNested(
+  entries: ArchiveEntry[],
+  privateProjectId: string | null = null,
+): { nodes: ProjectNode[]; rootName: string | null } {
   const nodes: ProjectNode[] = []
   // 目录路径（不含根）→ 节点 id。
   const folderIdByPath = new Map<string, string>()
@@ -338,6 +358,9 @@ export function nodesFromNested(entries: ArchiveEntry[]): { nodes: ProjectNode[]
     }
     const fileName = rest[rest.length - 1]
     const parentId = rest.length > 1 ? ensureFolder(rest.slice(0, -1)) : null
+    // 私有模式：文件落盘在 `perspicuity-private://<id>/<entry.path>`，条目路径
+    // 原样保留（含项目根段），与原生写入时的相对路径逐字符一致。
+    const trimmedPath = entry.path.replace(/^\/+/, '')
     nodes.push({
       id: createNodeId(),
       name: fileName,
@@ -346,9 +369,13 @@ export function nodesFromNested(entries: ArchiveEntry[]): { nodes: ProjectNode[]
       pinned: false,
       order: nextOrder(parentId),
       expanded: true,
-      fileRef: null,
-      // 内容随节点携带：导入的虚拟文件没有磁盘 URI，只能靠内存内容打开。
-      content: entry.content,
+      ...(privateProjectId
+        ? { fileRef: toPrivateFileRef(privateProjectId, trimmedPath, fileName) }
+        : {
+            fileRef: null,
+            // 内容随节点携带：内存兜底模式下没有磁盘 URI，只能靠它打开。
+            content: entry.content,
+          }),
     })
   }
   return { nodes, rootName }
@@ -359,8 +386,15 @@ export function nodesFromNested(entries: ArchiveEntry[]): { nodes: ProjectNode[]
  *
  * 优先读 manifest.json 精确还原层级；没有则按目录结构推。
  * 返回 projectName 兜底为归档第一段目录名或「导入的项目」。
+ *
+ * @param privateProjectId 传入时走「落盘私有目录」模式：文件节点带
+ *   source:'private' 的 fileRef，project.privateRoot 记下该标识。为 null/缺省
+ *   时退回旧的「纯内存虚拟树」（文件节点携带 content）。
  */
-export function parseProjectArchive(entries: ArchiveEntry[]): ProjectRecord {
+export function parseProjectArchive(
+  entries: ArchiveEntry[],
+  privateProjectId: string | null = null,
+): ProjectRecord {
   const manifestEntry = entries.find(entry => baseName(entry.path) === MANIFEST_FILENAME)
   if (manifestEntry) {
     const manifest = parseManifest(manifestEntry.content)
@@ -370,13 +404,14 @@ export function parseProjectArchive(entries: ArchiveEntry[]): ProjectRecord {
         name: manifest.projectName?.trim() || '导入的项目',
         pinned: false,
         expanded: true,
-        nodes: nodesFromManifest(manifest, entries),
+        nodes: nodesFromManifest(manifest, entries, privateProjectId),
         createdAt: new Date().toISOString(),
         schemaVersion: 2,
+        ...(privateProjectId ? { privateRoot: privateProjectId } : {}),
       }
     }
   }
-  const { nodes, rootName } = nodesFromNested(entries)
+  const { nodes, rootName } = nodesFromNested(entries, privateProjectId)
   return {
     id: createProjectId(),
     name: rootName?.trim() || '导入的项目',
@@ -385,6 +420,7 @@ export function parseProjectArchive(entries: ArchiveEntry[]): ProjectRecord {
     nodes,
     createdAt: new Date().toISOString(),
     schemaVersion: 2,
+    ...(privateProjectId ? { privateRoot: privateProjectId } : {}),
   }
 }
 

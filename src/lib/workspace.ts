@@ -45,6 +45,8 @@ export interface WorkspaceOpenResult {
   canWrite: boolean
   /** 目录授权是否仍是持久化的（绑定未被撤销）。 */
   persisted: boolean
+  /** 原文件是否带 UTF-8 BOM（私有副本读取时由原生回传）。 */
+  hasEncodingBom?: boolean
 }
 
 export interface WorkspacePermissionState {
@@ -126,6 +128,25 @@ interface WorkspacePlugin {
     uri: string
   }>
   probeWrite(options: { treeUri: string }): Promise<WorkspaceWriteProbe>
+  /** 把整棵导入树落盘到 App 私有目录，返回落盘后的文件相对路径清单。 */
+  importProjectToPrivate(options: {
+    projectId: string
+    entries: Array<{ path: string; content: string; isDirectory: boolean }>
+  }): Promise<{ ok: true; projectId: string; rootPath: string; files: string[] }>
+  /** 读私有项目里的一个文件，返回与 openDocument 同构的载荷。 */
+  readPrivateFile(options: {
+    projectId: string
+    relPath: string
+  }): Promise<WorkspaceOpenResult>
+  /** 原子写回私有项目里的一个文件。 */
+  writePrivateFile(options: {
+    projectId: string
+    relPath: string
+    markdown: string
+    encoding?: string
+  }): Promise<{ ok: true; size: number }>
+  /** 删除整个私有项目目录。 */
+  deletePrivateProject(options: { projectId: string }): Promise<{ ok: true }>
 }
 
 /**
@@ -396,4 +417,95 @@ export async function moveWorkspaceDocument(
     return null
   }
   return { uri: result.uri }
+}
+
+// ---------------------------------------------------------------------------
+// 私有目录项目：把导入的项目整树落盘到 App 私有目录
+//
+// 导入的 zip 项目不再做成「纯内存虚拟树」，而是整树写进 App 私有目录，文件
+// 节点持有真实相对路径。读写都走真实磁盘，因此编辑器保存 / 返回 / 重启全部
+// 复用既有 SAF 文档链路——canWrite 恒为 true，sourceUri 用自定义 scheme 前缀
+// `perspicuity-private://<projectId>/<relPath>`，前端据此路由到私有 IO。
+// 与 SAF 的差别：卸载 App 连数据一起消失（副本语义），但永不因清授权失联。
+// ---------------------------------------------------------------------------
+
+/** 私有项目 sourceUri 的 scheme 前缀；与原生 WorkspacePlugin 保持一致。 */
+export const PRIVATE_FILE_SCHEME = 'perspicuity-private://'
+
+/** 判断一个 sourceUri 是不是 App 私有目录里的项目文件。 */
+export function isPrivateProjectUri(sourceUri: string | null | undefined): boolean {
+  return typeof sourceUri === 'string' && sourceUri.startsWith(PRIVATE_FILE_SCHEME)
+}
+
+/** 从私有 sourceUri 里拆出 projectId 与相对路径；解析失败返回 null。 */
+export function parsePrivateProjectUri(
+  sourceUri: string,
+): { projectId: string; relPath: string } | null {
+  if (!isPrivateProjectUri(sourceUri)) {
+    return null
+  }
+  const rest = sourceUri.slice(PRIVATE_FILE_SCHEME.length)
+  const slash = rest.indexOf('/')
+  if (slash <= 0) {
+    return null
+  }
+  return { projectId: rest.slice(0, slash), relPath: rest.slice(slash + 1) }
+}
+
+/**
+ * 把整棵导入树写进 App 私有目录。
+ *
+ * 调用前应先生成 projectId（用于目录名），entries 是归档条目列表。
+ * 非原生环境返回 null（调用方据此降级回内存方案）。
+ */
+export async function importProjectToPrivate(
+  projectId: string,
+  entries: Array<{ path: string; content: string; isDirectory: boolean }>,
+): Promise<{ projectId: string; rootPath: string; files: string[] } | null> {
+  if (!isWorkspaceAvailable()) {
+    return null
+  }
+  const result = await Workspace.importProjectToPrivate({ projectId, entries })
+  if (!result.ok) {
+    return null
+  }
+  return { projectId: result.projectId, rootPath: result.rootPath, files: result.files }
+}
+
+/** 读私有项目里的一个文件；失败抛出可识别错误（调用方按错误码提示）。 */
+export async function readPrivateProjectFile(
+  projectId: string,
+  relPath: string,
+): Promise<WorkspaceOpenResult | null> {
+  if (!isWorkspaceAvailable()) {
+    return null
+  }
+  return await Workspace.readPrivateFile({ projectId, relPath })
+}
+
+/** 写回私有项目里的一个文件；失败返回错误码而不是抛异常。 */
+export async function writePrivateProjectFile(
+  projectId: string,
+  relPath: string,
+  markdown: string,
+  encoding = 'utf-8',
+): Promise<{ ok: boolean; code?: string }> {
+  if (!isWorkspaceAvailable()) {
+    return { ok: false, code: 'NOT_NATIVE' }
+  }
+  const result = await Workspace.writePrivateFile({ projectId, relPath, markdown, encoding })
+  return result.ok ? { ok: true } : { ok: false }
+}
+
+/** 删除整个私有项目目录（删项目 / 重导时调用），失败静默返回 false。 */
+export async function deletePrivateProject(projectId: string): Promise<boolean> {
+  if (!isWorkspaceAvailable()) {
+    return false
+  }
+  try {
+    const result = await Workspace.deletePrivateProject({ projectId })
+    return Boolean(result.ok)
+  } catch {
+    return false
+  }
 }

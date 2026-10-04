@@ -3,10 +3,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from '../../lib/i18n'
 import {
   getWorkspaceErrorCode,
+  isPrivateProjectUri,
   isWorkspaceAvailable,
   listWorkspaceDocuments,
   openWorkspaceDocument,
+  parsePrivateProjectUri,
   pickWorkspaceDirectory,
+  readPrivateProjectFile,
   type WorkspaceOpenResult,
 } from '../../lib/workspace'
 import {
@@ -166,6 +169,22 @@ async function openIndexedFileByUri(uri: string) {
   busy.value = true
   notice.value = null
   try {
+    // 私有副本：uri 是 `perspicuity-private://<id>/<rel>`，走私有目录读取，
+    // 打开后可写（canWrite 恒真），保存/返回都复用既有文档链路。
+    if (isPrivateProjectUri(uri)) {
+      const parsed = parsePrivateProjectUri(uri)
+      if (!parsed) {
+        notice.value = t('files.openFailed')
+        return
+      }
+      const result = await readPrivateProjectFile(parsed.projectId, parsed.relPath)
+      if (!result) {
+        notice.value = t('files.openFailed')
+        return
+      }
+      emit('openWorkspaceFile', result)
+      return
+    }
     const result = await openWorkspaceDocument(uri)
     if (!result) {
       return
