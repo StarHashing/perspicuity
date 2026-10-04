@@ -6,6 +6,7 @@ import {
   getShowHomeAfterAndroidSaveAction,
   getShowHomeAfterLocalDraftSaveAction,
   getShowHomeDocumentSaveAction,
+  getShowHomeForAndroidDocumentWithoutWriteAccess,
   type AppBackButtonState,
 } from './appExitDecisions'
 
@@ -237,5 +238,44 @@ describe('appExitDecisions', () => {
       currentScreen: 'editor',
       homeSelectionActive: true,
     })).toBe('show-home')
+  })
+
+  it('lets a sourceless in-memory import leave without a failed save', () => {
+    // A file imported as an in-memory copy has no sourceUri and can never be
+    // written back. Back must not attempt a save (which only flashes "Save
+    // failed" and keeps the editor open); with nothing changed it just leaves.
+    expect(getShowHomeForAndroidDocumentWithoutWriteAccess({
+      hasSourceUri: false,
+      isDirty: false,
+      hasDraftContent: true,
+    })).toBe('leave')
+
+    // Even with content present but no unsaved edits, leaving is safe.
+    expect(getShowHomeForAndroidDocumentWithoutWriteAccess({
+      hasSourceUri: false,
+      isDirty: false,
+      hasDraftContent: false,
+    })).toBe('leave')
+
+    // Unsaved edits still exist: ask before discarding them.
+    expect(getShowHomeForAndroidDocumentWithoutWriteAccess({
+      hasSourceUri: false,
+      isDirty: true,
+      hasDraftContent: true,
+    })).toBe('discard-and-leave')
+
+    // Dirty but the draft is empty, so there is nothing worth a prompt.
+    expect(getShowHomeForAndroidDocumentWithoutWriteAccess({
+      hasSourceUri: false,
+      isDirty: true,
+      hasDraftContent: false,
+    })).toBe('leave')
+
+    // A writable document with a source URI is left to the normal save path.
+    expect(getShowHomeForAndroidDocumentWithoutWriteAccess({
+      hasSourceUri: true,
+      isDirty: false,
+      hasDraftContent: true,
+    })).toBe('save')
   })
 })

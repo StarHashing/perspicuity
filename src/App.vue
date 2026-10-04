@@ -77,6 +77,7 @@ import {
   getShowHomeAfterAndroidSaveAction,
   getShowHomeAfterLocalDraftSaveAction,
   getShowHomeDocumentSaveAction,
+  getShowHomeForAndroidDocumentWithoutWriteAccess,
   type AppScreen,
 } from './lib/appExitDecisions'
 import { isAndroidRecoveryDraftId } from './features/android-documents/androidRecoveryDrafts'
@@ -1921,15 +1922,28 @@ async function showHome() {
 
   const saveAction = getShowHomeDocumentSaveAction(documentState.value.autosaveTarget)
   if (saveAction === 'save-android-document') {
-    // Read-only files can never be written back. Trying anyway would only
-    // flash “Save failed” and — worse — the failed save is what used to keep
-    // the editor open forever. Skip the save and ask to leave directly.
-    if (
-      documentState.value.isDirty &&
-      hasDraftContent() &&
-      !currentAndroidDocumentCanWrite.value
-    ) {
-      androidExitPromptOpen.value = true
+    // A document that can never be written back — read-only, or with no disk
+    // URI at all (files imported as in-memory copies) — must not attempt a
+    // save. Trying anyway only flashes “Save failed” and used to keep the
+    // editor open forever, so the user could never press Back out of it.
+    const sourceUri = documentState.value.sourceUri
+    if (!currentAndroidDocumentCanWrite.value || !sourceUri) {
+      const decision = getShowHomeForAndroidDocumentWithoutWriteAccess({
+        hasSourceUri: !!sourceUri,
+        isDirty: documentState.value.isDirty,
+        hasDraftContent: hasDraftContent(),
+      })
+      if (decision === 'discard-and-leave') {
+        androidExitPromptOpen.value = true
+        return
+      }
+      if (decision === 'leave') {
+        closeEditorToHome()
+        return
+      }
+      // 'save' falls through only for a writable doc with a source URI, which
+      // is impossible here; guard anyway by not saving an unwritable doc.
+      closeEditorToHome()
       return
     }
 

@@ -69,6 +69,38 @@ export function getShowHomeAfterAndroidSaveAction({
   return shouldPromptAndroidExitAfterSaveFailure ? 'open-android-exit-prompt' : 'stay-editor'
 }
 
+/**
+ * What to do when leaving the editor for an Android document that can never be
+ * written back — either it is read-only, or it has no disk URI at all (files
+ * imported as in-memory copies). Attempting a save would only flash
+ * “Save failed” and, worse, the failed save is what used to keep the editor
+ * open forever (the user could never press Back out of it).
+ *
+ *   - 'discard-and-leave'  unsaved edits exist: ask whether to leave (discard).
+ *   - 'leave'              nothing to save: just return home.
+ *   - 'save'               writable with a source: run the normal save path.
+ */
+export function getShowHomeForAndroidDocumentWithoutWriteAccess({
+  hasSourceUri,
+  isDirty,
+  hasDraftContent,
+}: {
+  hasSourceUri: boolean
+  isDirty: boolean
+  hasDraftContent: boolean
+}): 'discard-and-leave' | 'leave' | 'save' {
+  if (hasSourceUri && isDirty === false) {
+    // Still let the normal path decide (it will find nothing to save).
+    return 'save'
+  }
+
+  if (isDirty && hasDraftContent) {
+    return 'discard-and-leave'
+  }
+
+  return 'leave'
+}
+
 export function getShowHomeAfterLocalDraftSaveAction({
   shouldPromptLocalDraftSaveToDevice,
 }: {
