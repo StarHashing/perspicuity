@@ -89,6 +89,10 @@ const TEXT = {
     reauthorizeRebound: '已重新绑定「{name}」',
     reauthorizeStillReadOnly: '该目录仍不可写，可能是只读挂载或网盘只读',
     reauthorizeFailed: '重新授权失败，请重试',
+    share: '分享',
+    sharingWait: '正在准备分享…',
+    shareDone: '已打开分享面板',
+    shareFailed: '分享失败',
   },
   en: {
     projects: 'Projects',
@@ -173,6 +177,10 @@ writeDone: 'Written to disk: {name}',
     reauthorizeRebound: 'Re-bound to “{name}”',
     reauthorizeStillReadOnly: 'This folder is still read-only (read-only mount or online drive)',
     reauthorizeFailed: 'Re-authorization failed; please try again',
+    share: 'Share',
+    sharingWait: 'Preparing to share…',
+    shareDone: 'Share sheet opened',
+    shareFailed: 'Sharing failed',
   },
 } as const
 

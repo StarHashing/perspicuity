@@ -185,7 +185,7 @@ export const pt = {
   'editor.exit.keepRecovery': 'Manter rascunho de recuperação',
   'editor.exit.discardChanges': 'Descartar alterações',
   'editor.exit.androidReadOnlyMessage':
-    'Este arquivo não pode ser salvo diretamente. Salve uma cópia ou mantenha um rascunho de recuperação antes de sair.',
+    'Este arquivo é somente leitura; as alterações não podem ser salvas. Sair mesmo assim?',
   'editor.exit.androidSaveFailedMessage':
     'O Perspicuity não conseguiu salvar este arquivo. Salve uma cópia ou mantenha um rascunho de recuperação antes de sair.',
   'editor.incomingOpen.title': 'Descartar alterações não salvas?',

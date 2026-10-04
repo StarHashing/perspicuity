@@ -185,7 +185,7 @@ export const ko = {
   'editor.exit.keepRecovery': '복구 초안 유지',
   'editor.exit.discardChanges': '변경 사항 폐기',
   'editor.exit.androidReadOnlyMessage':
-    '이 파일은 직접 저장할 수 없습니다. 나가기 전에 사본을 저장하거나 복구 초안을 유지하세요.',
+    '이 파일은 읽기 전용이라 변경 사항을 저장할 수 없습니다. 그래도 나갈까요?',
   'editor.exit.androidSaveFailedMessage':
     '澄怀가 이 파일을 저장하지 못했습니다. 나가기 전에 사본을 저장하거나 복구 초안을 유지하세요.',
   'editor.incomingOpen.title': '저장하지 않은 변경 사항을 폐기할까요?',

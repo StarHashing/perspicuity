@@ -181,7 +181,7 @@ export const en = {
   'editor.exit.keepRecovery': 'Keep recovery draft',
   'editor.exit.discardChanges': 'Discard changes',
   'editor.exit.androidReadOnlyMessage':
-    'This file cannot be saved directly. Save a copy or keep a recovery draft before leaving.',
+    'This file is read-only, so changes cannot be saved. Leave anyway?',
   'editor.exit.androidSaveFailedMessage':
     'Perspicuity could not save this file. Save a copy or keep a recovery draft before leaving.',
   'editor.incomingOpen.title': 'Discard unsaved changes?',

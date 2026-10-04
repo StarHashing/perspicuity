@@ -182,7 +182,7 @@ export const zhCN = {
   'editor.exit.keepRecovery': '保留恢复草稿',
   'editor.exit.discardChanges': '丢弃更改',
   'editor.exit.androidReadOnlyMessage':
-    '此文件无法直接保存。离开前请保存副本，或保留恢复草稿。',
+    '当前文件是只读文件，修改后无法保存。确定要退出吗？',
   'editor.exit.androidSaveFailedMessage':
     '澄怀 未能保存此文件。离开前请保存副本，或保留恢复草稿。',
   'editor.incomingOpen.title': '要丢弃未保存的更改吗？',

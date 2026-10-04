@@ -186,7 +186,7 @@ export const de = {
   'editor.exit.keepRecovery': 'Wiederherstellungsentwurf behalten',
   'editor.exit.discardChanges': 'Änderungen verwerfen',
   'editor.exit.androidReadOnlyMessage':
-    'Diese Datei kann nicht direkt gespeichert werden. Speichere eine Kopie oder behalte einen Wiederherstellungsentwurf, bevor du das Dokument verlässt.',
+    'Diese Datei ist schreibgeschützt; Änderungen können nicht gespeichert werden. Trotzdem verlassen?',
   'editor.exit.androidSaveFailedMessage':
     'Perspicuity konnte diese Datei nicht speichern. Speichere eine Kopie oder behalte einen Wiederherstellungsentwurf, bevor du das Dokument verlässt.',
   'editor.incomingOpen.title': 'Ungespeicherte Änderungen verwerfen?',

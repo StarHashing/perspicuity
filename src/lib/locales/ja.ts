@@ -185,7 +185,7 @@ export const ja = {
   'editor.exit.keepRecovery': '復元用下書きを残す',
   'editor.exit.discardChanges': '変更を破棄',
   'editor.exit.androidReadOnlyMessage':
-    'このファイルは直接保存できません。閉じる前にコピーを保存するか、復元用下書きを残してください。',
+    'このファイルは読み取り専用のため、変更を保存できません。そのまま閉じますか？',
   'editor.exit.androidSaveFailedMessage':
     'このファイルを保存できませんでした。閉じる前にコピーを保存するか、復元用下書きを残してください。',
   'editor.incomingOpen.title': '未保存の変更を破棄しますか？',

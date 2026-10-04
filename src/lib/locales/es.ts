@@ -185,7 +185,7 @@ export const es = {
   'editor.exit.keepRecovery': 'Conservar borrador de recuperación',
   'editor.exit.discardChanges': 'Descartar cambios',
   'editor.exit.androidReadOnlyMessage':
-    'Este archivo no se puede guardar directamente. Guarda una copia o conserva un borrador de recuperación antes de salir.',
+    'Este archivo es de solo lectura; los cambios no se pueden guardar. ¿Salir de todos modos?',
   'editor.exit.androidSaveFailedMessage':
     'Perspicuity no pudo guardar este archivo. Guarda una copia o conserva un borrador de recuperación antes de salir.',
   'editor.incomingOpen.title': '¿Descartar los cambios sin guardar?',

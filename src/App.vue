@@ -1921,6 +1921,18 @@ async function showHome() {
 
   const saveAction = getShowHomeDocumentSaveAction(documentState.value.autosaveTarget)
   if (saveAction === 'save-android-document') {
+    // Read-only files can never be written back. Trying anyway would only
+    // flash “Save failed” and — worse — the failed save is what used to keep
+    // the editor open forever. Skip the save and ask to leave directly.
+    if (
+      documentState.value.isDirty &&
+      hasDraftContent() &&
+      !currentAndroidDocumentCanWrite.value
+    ) {
+      androidExitPromptOpen.value = true
+      return
+    }
+
     const saved = await saveAndroidDocument()
     const afterSaveAction = getShowHomeAfterAndroidSaveAction({
       saved,
@@ -2073,9 +2085,10 @@ async function handleAppBackButton() {
     case 'close-incoming-open-prompt':
       keepEditingInsteadOfIncomingOpen()
       return
-    case 'close-android-exit-prompt':
-      androidExitPromptOpen.value = false
-      status.value = getAndroidEditorStatus()
+    case 'discard-android-exit-prompt':
+      // Back on the read-only / save-failed exit prompt: leave with the
+      // unsaved changes dropped, exactly like tapping “Discard changes”.
+      discardAndroidChangesAndShowHome()
       return
     case 'close-home-sheet':
       homeDeleteSheetOpen.value = false

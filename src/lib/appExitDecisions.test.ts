@@ -81,7 +81,7 @@ describe('appExitDecisions', () => {
       linkSheetOpen: true,
       editorMenuOpen: true,
       editorToolbarExpanded: true,
-    })).toBe('close-android-exit-prompt')
+    })).toBe('discard-android-exit-prompt')
 
     expect(getAppBackButtonAction({
       ...baseBackState,
@@ -165,6 +165,26 @@ describe('appExitDecisions', () => {
       ...baseBackState,
       currentScreen: 'editor',
     })).toBe('show-home')
+  })
+
+  it('escapes the Android exit prompt instead of looping on a read-only file', () => {
+    // Regression: with the exit prompt open, Back must DISCARD and leave.
+    // The old 'close-android-exit-prompt' only hid the sheet while staying in
+    // the editor, so the next Back re-ran showHome() -> save failed -> prompt,
+    // and a read-only document could never be exited.
+    const state = {
+      ...baseBackState,
+      currentScreen: 'editor' as const,
+      androidExitPromptOpen: true,
+    }
+    expect(getAppBackButtonAction(state)).toBe('discard-android-exit-prompt')
+
+    // The other overlays alongside it do not steal priority from the prompt.
+    expect(getAppBackButtonAction({
+      ...state,
+      draftExitPromptOpen: true,
+      linkSheetOpen: true,
+    })).toBe('discard-android-exit-prompt')
   })
 
   it('preserves Android back priority on home settings and document tabs', () => {

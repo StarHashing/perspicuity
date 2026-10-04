@@ -32,7 +32,7 @@ export interface AppBackButtonState {
 
 export type AppBackButtonAction =
   | 'close-incoming-open-prompt'
-  | 'close-android-exit-prompt'
+  | 'discard-android-exit-prompt'
   | 'close-local-draft-exit-prompt'
   | 'close-link-sheet'
   | 'close-table-sheet'
@@ -100,7 +100,11 @@ export function getAppBackButtonAction({
   }
 
   if (androidExitPromptOpen) {
-    return 'close-android-exit-prompt'
+    // Back on the Android exit prompt means "yes, leave": discard the
+    // unsaved changes and return home. Returning 'close-android-exit-prompt'
+    // here would just hide the sheet while staying in the editor, so the
+    // next Back re-opens it — a loop a read-only file could never escape.
+    return 'discard-android-exit-prompt'
   }
 
   if (draftExitPromptOpen) {

@@ -185,7 +185,7 @@ export const zhTW = {
   'editor.exit.keepRecovery': '保留修復草稿',
   'editor.exit.discardChanges': '捨棄變更',
   'editor.exit.androidReadOnlyMessage':
-    '此檔案無法直接儲存。離開前請另存副本，或保留修復草稿。',
+    '此檔案為唯讀，修改後無法儲存。確定要離開嗎？',
   'editor.exit.androidSaveFailedMessage':
     '澄懷 無法儲存此檔案。離開前請另存副本，或保留修復草稿。',
   'editor.incomingOpen.title': '要捨棄未儲存的變更嗎？',

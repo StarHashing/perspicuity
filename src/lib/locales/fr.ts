@@ -185,7 +185,7 @@ export const fr = {
   'editor.exit.keepRecovery': 'Garder le brouillon de récupération',
   'editor.exit.discardChanges': 'Abandonner les modifications',
   'editor.exit.androidReadOnlyMessage':
-    'Ce fichier ne peut pas être enregistré directement. Enregistrez une copie ou gardez un brouillon de récupération avant de quitter.',
+    'Ce fichier est en lecture seule ; les modifications ne peuvent pas être enregistrées. Quitter quand même ?',
   'editor.exit.androidSaveFailedMessage':
     'Perspicuity n’a pas pu enregistrer ce fichier. Enregistrez une copie ou gardez un brouillon de récupération avant de quitter.',
   'editor.incomingOpen.title': 'Abandonner les modifications non enregistrées ?',

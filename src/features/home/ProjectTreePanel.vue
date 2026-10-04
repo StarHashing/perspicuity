@@ -81,6 +81,10 @@ const emit = defineEmits<{
   openIndexedFile: [uri: string]
   /** 打开导入归档来的虚拟文件：内容在内存里，直接交给编辑器。 */
   openArchivedFile: [payload: WorkspaceOpenResult]
+  /** 分享一个被索引的文件（按 URI 读内容后交给系统分享，上层处理）。 */
+  shareIndexedFile: [payload: { uri: string; name: string }]
+  /** 分享一个内存兜底文件（内容已在内存里，直接交给上层分享）。 */
+  shareArchivedFile: [payload: { name: string; markdown: string }]
 }>()
 
 const { locale } = useI18n()
@@ -1428,6 +1432,32 @@ async function openFile(node: ProjectNode) {
   notice.value = T.value.permissionLost
 }
 
+/**
+ * 分享长按菜单里选中的单个文件。
+ *
+ * 只对文件节点生效（菜单按钮已按 kind === 'file' 过滤）。内容读取按来源分流：
+ *   - `fileRef`（SAF 索引 / 私有副本 / 项目内新建）：把 URI 透传给上层，由它按
+ *     scheme 读内容后分享（与打开文件走同一套 URI 分流逻辑）。
+ *   - 内存兜底 `content`：内容已在内存里，直接交给上层分享。
+ * 上层负责读取真实内容、套用图片/编码设置并调起系统分享面板。
+ */
+function shareMenuNode() {
+  const node = menuNode.value
+  closeMenu()
+  if (!node || node.kind !== 'file') {
+    return
+  }
+  if (node.fileRef) {
+    emit('shareIndexedFile', { uri: node.fileRef.uri, name: node.name })
+    return
+  }
+  if (typeof node.content === 'string') {
+    emit('shareArchivedFile', { name: node.name, markdown: node.content })
+    return
+  }
+  notice.value = T.value.permissionLost
+}
+
 /** 是否为拖拽悬停的目标行（用于高亮）。 */
 function isDropTarget(nodeId: string | null) {
   if (!draggingId.value || !dropTargetId.value) {
@@ -1680,6 +1710,17 @@ onMounted(async () => {
         @click="renameMenuNode"
       >
         {{ T.rename }}
+      </button>
+      <!-- 分享单个 md 文件：内容读取按节点来源分流，读取与分享由上层统一处理。 -->
+      <button
+        v-if="!menuIsProjectRoot && menuNode?.kind === 'file'"
+        class="ptree-menu-item"
+        type="button"
+        data-testid="project-menu-share"
+        :disabled="busy"
+        @click="shareMenuNode"
+      >
+        📤 {{ T.share }}
       </button>
       <button
         v-if="!menuIsProjectRoot"

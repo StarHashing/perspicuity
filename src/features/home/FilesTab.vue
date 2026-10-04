@@ -24,6 +24,14 @@ import {
   type WorkspaceSearchEntry,
 } from './workspaceStore'
 import type { HomeDocumentItem } from './homeDocuments'
+import {
+  getAndroidDocumentUserMessage,
+  shareAndroidMarkdownDocument,
+} from '../../lib/androidDocuments'
+import { getImageSharingSettings } from '../android-documents/imageSharingSettings'
+import { getAdvancedSettings, getMarkdownSaveSettings } from '../settings/advancedSettings'
+import { useSettingsState } from '../settings/settingsState'
+import { projectTreeText } from './projectTreeText'
 import ProjectTreePanel from './ProjectTreePanel.vue'
 
 const props = defineProps<{
@@ -39,7 +47,14 @@ const emit = defineEmits<{
   openWorkspaceFile: [payload: WorkspaceOpenResult]
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+/**
+ * 分享功能需要的设置读取。项目树面板用的是局部文案字典，这里也读一份
+ * （locale 与 App 一致），用于分享提示文案。
+ */
+const treeText = computed(() => projectTreeText(locale.value))
+const { getValue } = useSettingsState()
 
 const workspaces = ref<WorkspaceRecord[]>([])
 const entries = ref<WorkspaceSearchEntry[]>([])
@@ -200,7 +215,88 @@ async function openIndexedFileByUri(uri: string) {
   }
 }
 
-/** 搜索池 = 绑定目录内的文件 + 最近打开过的文档。 */
+/**
+ * 项目树里长按「分享」一个被索引的文件。
+ *
+ * 与打开文件同源：私有副本走私有目录读取、SAF 走工作区读取，拿到 markdown 后
+ * 套用用户的图片/编码设置调起系统分享面板。分享不修改源文件，也不进编辑器。
+ */
+async function shareIndexedFileByUri(payload: { uri: string; name: string }) {
+  if (busy.value) {
+    return
+  }
+  busy.value = true
+  notice.value = null
+  try {
+    const markdown = await readIndexedMarkdown(payload.uri)
+    if (markdown === null) {
+      notice.value = treeText.value.shareFailed
+      return
+    }
+    await shareMarkdownContent(payload.name, markdown)
+  } catch (error) {
+    notice.value = getWorkspaceErrorCode(error) === 'WORKSPACE_PERMISSION_LOST'
+      ? t('files.permissionLost')
+      : treeText.value.shareFailed
+  } finally {
+    busy.value = false
+  }
+}
+
+/** 分享一个内存兜底文件：内容已在内存里，直接分享。 */
+async function shareArchivedFile(payload: { name: string; markdown: string }) {
+  if (busy.value) {
+    return
+  }
+  busy.value = true
+  notice.value = null
+  try {
+    await shareMarkdownContent(payload.name, payload.markdown)
+  } catch {
+    notice.value = treeText.value.shareFailed
+  } finally {
+    busy.value = false
+  }
+}
+
+/**
+ * 按 URI 读取 markdown 原文。返回 null 表示无法定位/读取（调用方提示失败）。
+ * 私有副本（`perspicuity-private://`）走私有目录；其余走工作区文档读取。
+ */
+async function readIndexedMarkdown(uri: string): Promise<string | null> {
+  if (isPrivateProjectUri(uri)) {
+    const parsed = parsePrivateProjectUri(uri)
+    if (!parsed) {
+      return null
+    }
+    const result = await readPrivateProjectFile(parsed.projectId, parsed.relPath)
+    return result ? result.markdown : null
+  }
+  const result = await openWorkspaceDocument(uri)
+  return result ? result.markdown : null
+}
+
+/**
+ * 用当前设置把一段 markdown 交给系统分享面板。
+ * 与编辑器里的「分享」保持一致：图片分享、编码都沿用用户设置。
+ */
+async function shareMarkdownContent(name: string, markdown: string) {
+  const imageSharingSettings = getImageSharingSettings(getValue)
+  const advancedSettings = getAdvancedSettings(getValue)
+  const markdownSaveSettings = getMarkdownSaveSettings(advancedSettings)
+  const suggestedName = name.toLowerCase().endsWith('.md') ? name : `${name}.md`
+  try {
+    await shareAndroidMarkdownDocument(markdown, suggestedName, {
+      attachImages: imageSharingSettings.shareImages === 'attach',
+      encoding: markdownSaveSettings.encoding,
+    })
+    notice.value = treeText.value.shareDone
+  } catch (error) {
+    // 转成用户可读文案；具体错误已在底层记录。
+    void getAndroidDocumentUserMessage(error)
+    throw error
+  }
+}
 const searchPool = computed<WorkspaceSearchEntry[]>(() => {
   const recent: WorkspaceSearchEntry[] = props.recentDocuments.map(item => ({
     id: `recent::${item.id}`,
@@ -322,6 +418,8 @@ onMounted(() => {
       :disabled="busy || !supportsWorkspaces"
       @open-indexed-file="openIndexedFileByUri"
       @open-archived-file="payload => emit('openWorkspaceFile', payload)"
+      @share-indexed-file="shareIndexedFileByUri"
+      @share-archived-file="shareArchivedFile"
     />
 
     <!-- 搜索结果 -->

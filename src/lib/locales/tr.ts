@@ -185,7 +185,7 @@ export const tr = {
   'editor.exit.keepRecovery': 'Kurtarma taslağını tut',
   'editor.exit.discardChanges': 'Değişiklikleri at',
   'editor.exit.androidReadOnlyMessage':
-    'Bu dosya doğrudan kaydedilemez. Çıkmadan önce bir kopya kaydedin veya bir kurtarma taslağı tutun.',
+    'Bu dosya salt okunur; değişiklikler kaydedilemez. Yine de çıkılsın mı?',
   'editor.exit.androidSaveFailedMessage':
     'Perspicuity bu dosyayı kaydedemedi. Çıkmadan önce bir kopya kaydedin veya bir kurtarma taslağı tutun.',
   'editor.incomingOpen.title': 'Kaydedilmemiş değişiklikler atılsın mı?',
