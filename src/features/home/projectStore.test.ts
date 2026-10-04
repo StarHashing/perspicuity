@@ -262,6 +262,26 @@ describe('projectStore 拖拽合法性', () => {
     })
   })
 
+  it('不能把节点拖到另一个文件上（防止节点在树里消失）', () => {
+    // 回归用例：曾经把一个 md 拖到另一个 md 上会「假消失」——它被挂成
+    // 那个文件的子节点，而树只向下展开目录，于是从视图里消失；刷新后读回
+    // 存储又冒出来。文件不能承载子节点，必须拒绝。
+    const { root, outline, story } = buildTree()
+    const a = createFileNode(root.nodes, outline.id, 'a.md')!
+    const b = createFileNode(root.nodes, outline.id, 'b.md')!
+    const nodes = [...root.nodes, a, b]
+    expect(canMoveNode(nodes, a.id, b.id)).toEqual({
+      ok: false,
+      reason: 'INTO_FILE',
+    })
+    // moveNode 必须原样返回，绝不把 a 挂到 b 名下。
+    const next = moveNode(nodes, a.id, b.id)
+    expect(findNode(next, a.id)!.parentId).toBe(outline.id)
+    expect(findNode(next, a.id)!.parentId).not.toBe(b.id)
+    // 目录仍然可以作为落点，原规则不受影响。
+    expect(canMoveNode(nodes, story.id, outline.id)).toEqual({ ok: true })
+  })
+
   it('合法移动：把文件从深层拖到顶层目录', () => {
     const { root, story, outline } = buildTree()
     const check = canMoveNode(root.nodes, story.id, outline.id)
@@ -333,6 +353,27 @@ describe('projectStore 持久化容错', () => {
       ]),
     )
     expect(parsed[0].nodes[0].parentId).toBe(null)
+  })
+
+  it('挂在文件名下的脏节点被提升到顶层（历史拖拽 bug 修复）', () => {
+    // 旧版本允许把节点拖到另一个文件上，parentId 因此指向一个 file 节点，
+    // 该节点在树里不可见。解析时应把它提升到顶层，让用户重新看到。
+    const parsed = parseProjects(
+      JSON.stringify([
+        {
+          id: 'p1',
+          name: '项目',
+          nodes: [
+            { id: 'f1', name: 'a.md', kind: 'file', parentId: null },
+            { id: 'f2', name: 'b.md', kind: 'file', parentId: 'f1' },
+          ],
+        },
+      ]),
+    )
+    const byId = new Map(parsed[0].nodes.map(n => [n.id, n]))
+    expect(byId.get('f2')!.parentId).toBe(null)
+    // 合法的目录父子关系不受影响（这里没有目录，仅确认 f1 仍在顶层）。
+    expect(byId.get('f1')!.parentId).toBe(null)
   })
 
   it('缺字段的节点被补上安全默认值', () => {

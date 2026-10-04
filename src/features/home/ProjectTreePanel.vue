@@ -1395,6 +1395,8 @@ function rejectionText(reason?: string) {
   switch (reason) {
     case 'SELF':
       return T.value.dragSelf
+    case 'INTO_FILE':
+      return T.value.dragIntoFile
     case 'INTO_DESCENDANT':
       return T.value.dragDescendant
     case 'TOO_DEEP':

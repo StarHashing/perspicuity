@@ -384,6 +384,7 @@ export function updateFileRef(
 
 export type MoveRejection =
   | 'SELF'
+  | 'INTO_FILE'
   | 'INTO_DESCENDANT'
   | 'TOO_DEEP'
   | 'NOT_FOUND'
@@ -414,6 +415,16 @@ export function canMoveNode(
   }
   if (nextParentId === nodeId) {
     return { ok: false, reason: 'SELF' }
+  }
+  // A file can never host children. Without this guard, dropping a node onto
+  // a file would set its parentId to that file, and since the tree walk only
+  // descends into folders the node would vanish from view (a reload would
+  // read it back from storage). Reject it so the drop is a visible no-op.
+  if (nextParentId !== null) {
+    const target = findNode(nodes, nextParentId)
+    if (target && target.kind === 'file') {
+      return { ok: false, reason: 'INTO_FILE' }
+    }
   }
   if (nextParentId !== null) {
     const descendants = descendantIds(nodes, nodeId)
@@ -621,11 +632,20 @@ export function parseProjects(value: string | null): ProjectRecord[] {
       nodes.push(node)
     }
     // 悬挂的 parentId（父节点被丢弃了）提升为顶层。
-    const repaired = nodes.map(node =>
-      node.parentId !== null && !seenNodes.has(node.parentId)
-        ? { ...node, parentId: null }
-        : node,
-    )
+    // 另外：历史版本允许把节点拖到「文件」上，导致该节点被挂在文件名下、
+    // 在树里不可见（刷新也读不回可视状态）。文件不能承载子节点，遇到这种
+    // 脏数据一律提升到顶层，让用户重新看到它。
+    const nodeById = new Map(nodes.map(node => [node.id, node]))
+    const repaired = nodes.map(node => {
+      if (node.parentId === null) {
+        return node
+      }
+      const parent = nodeById.get(node.parentId)
+      if (!parent || parent.kind === 'file') {
+        return { ...node, parentId: null }
+      }
+      return node
+    })
 
     const boundTree = parseBoundTree(candidate.boundTree)
 
